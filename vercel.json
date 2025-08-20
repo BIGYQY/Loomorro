@@ -5,7 +5,8 @@
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "build"
+        "distDir": "build",
+        "framework": "create-react-app"
       }
     },
     {
@@ -19,8 +20,11 @@
       "dest": "/backend/server.js"
     },
     {
-      "src": "/(.*)",
+      "src": "/((?!api).*)",
       "dest": "/frontend/$1"
     }
-  ]
+  ],
+  "env": {
+    "CI": "false"
+  }
 }
