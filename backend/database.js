@@ -3,11 +3,8 @@
 
   // 创建数据库连接池
   const pool = new Pool({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
+    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:vipnb668@@db.ypvlcegqyoismkumbqvv.supabase.co:5432/postgres',
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
 
   // 测试数据库连接
