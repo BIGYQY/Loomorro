@@ -5,6 +5,7 @@ import Goals from './components/Goals';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [user, setUser] = useState(null);
 
   // 检查本地存储是否有token

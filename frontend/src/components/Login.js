@@ -32,6 +32,7 @@ const Login = ({ onLogin }) => {
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
+      // eslint-disable-next-line no-unused-vars
       const response = await axios.post('http://localhost:3001/api/register', {
         email,
         password,

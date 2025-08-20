@@ -282,10 +282,12 @@ const Goals = ({ onLogout }) => {
     return elements;
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchGoals();
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
