@@ -25,6 +25,7 @@
     }
   ],
   "env": {
-    "CI": "false"
+    "CI": "false",
+    "GENERATE_SOURCEMAP": "false"
   }
 }
