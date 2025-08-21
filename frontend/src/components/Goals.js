@@ -15,6 +15,9 @@ const Goals = ({ onLogout }) => {
   const [editGoalTitle, setEditGoalTitle] = useState('');
   const [editGoalDescription, setEditGoalDescription] = useState('');
   
+  // 主题切换状态
+  const [isDarkMode, setIsDarkMode] = useState(false); // 默认盛夏晨曦主题
+  
   // 画布相关状态
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -24,6 +27,42 @@ const Goals = ({ onLogout }) => {
 
   // 获取token
   const getToken = () => localStorage.getItem('token');
+
+  // 主题切换
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+    localStorage.setItem('darkMode', !isDarkMode);
+  };
+
+  // 双主题配置：盛夏晨曦 🌅 & 静谧海洋 🌊
+  const theme = {
+    summer: {
+      background: '#FEF4DE',    // 温暖米白
+      surface: '#FFE69D',       // 柔和金黄  
+      text: '#5D4037',          // 深棕色文字
+      textSecondary: '#8D6E63', // 中棕色次要文字
+      border: '#FFB904',        // 橙黄色边框
+      primary: '#FFB904',       // 明亮橙黄
+      secondary: '#FF9302',     // 深橙色
+      accent: '#FF9302',        // 深橙色强调
+      name: '盛夏晨曦',
+      icon: '🌅'
+    },
+    ocean: {
+      background: '#E0FFDC',    // 清新薄荷绿
+      surface: '#39E6F4',       // 天蓝色面板
+      text: '#1A365D',          // 深海蓝文字
+      textSecondary: '#2D5282', // 中海蓝次要文字  
+      border: '#288CFF',        // 明亮海蓝边框
+      primary: '#288CFF',       // 海蓝主按钮
+      secondary: '#3C67DC',     // 深蓝次要按钮
+      accent: '#3C67DC',        // 深蓝强调色
+      name: '静谧海洋',
+      icon: '🌊'
+    }
+  };
+  
+  const currentTheme = isDarkMode ? theme.ocean : theme.summer;
 
   // 构建树状结构数据并计算位置
   const buildTreeData = (goals) => {
@@ -192,11 +231,35 @@ const Goals = ({ onLogout }) => {
     setIsDragging(false);
   };
 
-  // 滚轮缩放
+  // 滚轮缩放（支持10倍放大）
   const handleWheel = (e) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(prev => Math.max(0.5, Math.min(2, prev + delta)));
+    setScale(prev => Math.max(0.2, Math.min(10, prev + delta)));
+  };
+
+  // 计算画布尺寸（根据节点位置）
+  const calculateCanvasSize = (nodes) => {
+    if (!nodes || nodes.length === 0) return { width: 800, height: 600 };
+    
+    let maxX = 0, maxY = 0;
+    
+    const getNodeBounds = (nodeList) => {
+      nodeList.forEach(node => {
+        maxX = Math.max(maxX, node.x + 120); // 节点宽度120
+        maxY = Math.max(maxY, node.y + 60);  // 节点高度60
+        if (node.children) {
+          getNodeBounds(node.children);
+        }
+      });
+    };
+    
+    getNodeBounds(nodes);
+    
+    return {
+      width: Math.max(800, maxX + 200), // 至少800宽度，右边留200px边距
+      height: Math.max(600, maxY + 200) // 至少600高度，底部留200px边距
+    };
   };
 
   // 渲染所有节点和连线
@@ -204,18 +267,31 @@ const Goals = ({ onLogout }) => {
     const elements = [];
 
     const processNode = (node) => {
-      // 渲染连线到子节点
+      // 渲染连线到子节点（贝塞尔曲线）
       if (node.children) {
         node.children.forEach(child => {
+          const startX = node.x + 120;
+          const startY = node.y + 30;
+          const endX = child.x;
+          const endY = child.y + 30;
+          
+          // 计算贝塞尔曲线控制点
+          const controlPoint1X = startX + (endX - startX) * 0.5;
+          const controlPoint1Y = startY;
+          const controlPoint2X = startX + (endX - startX) * 0.5;
+          const controlPoint2Y = endY;
+          
+          const pathData = `M ${startX} ${startY} C ${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${endX} ${endY}`;
+          
           elements.push(
-            <line
+            <path
               key={`line-${node.id}-${child.id}`}
-              x1={node.x + 120}
-              y1={node.y + 30}
-              x2={child.x}
-              y2={child.y + 30}
-              stroke="#ddd"
+              d={pathData}
+              stroke={currentTheme.border}
               strokeWidth="2"
+              fill="none"
+              opacity="0.6"
+              style={{ pointerEvents: 'none' }}
             />
           );
           processNode(child);
@@ -225,16 +301,26 @@ const Goals = ({ onLogout }) => {
       // 渲染节点
       elements.push(
         <g key={`node-${node.id}`}>
+          {/* 节点阴影 */}
+          <rect
+            x={node.x + 2}
+            y={node.y + 2}
+            width="120"
+            height="60"
+            rx="12"
+            fill="rgba(0,0,0,0.1)"
+            style={{ pointerEvents: 'none' }}
+          />
           {/* 节点背景 */}
           <rect
             x={node.x}
             y={node.y}
             width="120"
             height="60"
-            rx="8"
-            fill={selectedGoal?.id === node.id ? '#e3f2fd' : 'white'}
-            stroke={selectedGoal?.id === node.id ? '#2196f3' : '#ddd'}
-            strokeWidth={selectedGoal?.id === node.id ? '2' : '1'}
+            rx="12"
+            fill={selectedGoal?.id === node.id ? currentTheme.accent : currentTheme.surface}
+            stroke={selectedGoal?.id === node.id ? currentTheme.primary : currentTheme.border}
+            strokeWidth={selectedGoal?.id === node.id ? '3' : '2'}
             style={{ cursor: 'pointer' }}
             onClick={() => setSelectedGoal(selectedGoal?.id === node.id ? null : node)}
           />
@@ -244,7 +330,7 @@ const Goals = ({ onLogout }) => {
             y={node.y + 25}
             textAnchor="middle"
             fontSize="12"
-            fill="#333"
+            fill={currentTheme.text}
             style={{ pointerEvents: 'none' }}
           >
             {node.title.length > 10 ? node.title.substring(0, 10) + '...' : node.title}
@@ -255,7 +341,7 @@ const Goals = ({ onLogout }) => {
               y={node.y + 40}
               textAnchor="middle"
               fontSize="10"
-              fill="#666"
+              fill={currentTheme.textSecondary}
               style={{ pointerEvents: 'none' }}
             >
               {node.description.length > 15 ? node.description.substring(0, 15) + '...' : node.description}
@@ -268,7 +354,7 @@ const Goals = ({ onLogout }) => {
               y={node.y + 55}
               textAnchor="middle"
               fontSize="9"
-              fill="#999"
+              fill={currentTheme.textSecondary}
               style={{ pointerEvents: 'none' }}
             >
               {node.children.length} 个子目标
@@ -394,12 +480,12 @@ const Goals = ({ onLogout }) => {
   }
 
   return (
-    <div style={{ height: '100vh', backgroundColor: 'white' }}>
+    <div style={{ height: '100vh', backgroundColor: currentTheme.background }}>
       {/* 顶部工具栏 */}
       <div style={{
         height: '60px',
-        backgroundColor: 'white',
-        borderBottom: '1px solid #ddd',
+        backgroundColor: currentTheme.surface,
+        borderBottom: `1px solid ${currentTheme.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -408,7 +494,33 @@ const Goals = ({ onLogout }) => {
         top: 0,
         zIndex: 100
       }}>
-        <h1 style={{ margin: 0, fontSize: '18px', color: '#333' }}>🌳 Loomorro</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button
+            onClick={toggleTheme}
+            style={{
+              height: '36px',
+              paddingLeft: '12px',
+              paddingRight: '12px',
+              borderRadius: '18px',
+              border: `2px solid ${currentTheme.border}`,
+              backgroundColor: currentTheme.surface,
+              color: currentTheme.text,
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>{currentTheme.icon}</span>
+            <span>{currentTheme.name}</span>
+          </button>
+          <h1 style={{ margin: 0, fontSize: '18px', color: currentTheme.text }}>🌳 Loomorro</h1>
+        </div>
         
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {/* 显示当前缩放比例 */}
@@ -516,7 +628,7 @@ const Goals = ({ onLogout }) => {
         ref={canvasRef}
         style={{
           height: 'calc(100vh - 120px)',
-          backgroundColor: 'white',
+          backgroundColor: currentTheme.background,
           cursor: isDragging ? 'grabbing' : 'grab',
           overflow: 'hidden',
           position: 'relative'
@@ -539,11 +651,12 @@ const Goals = ({ onLogout }) => {
           </div>
         ) : (
           <svg
-            width="100%"
-            height="100%"
+            width={calculateCanvasSize(treeData).width}
+            height={calculateCanvasSize(treeData).height}
             style={{
               transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-              transformOrigin: '0 0'
+              transformOrigin: '0 0',
+              display: 'block'
             }}
           >
             {renderAllNodes(treeData)}
@@ -558,8 +671,8 @@ const Goals = ({ onLogout }) => {
         left: 0,
         right: 0,
         height: '60px',
-        backgroundColor: 'white',
-        borderTop: '1px solid #ddd',
+        backgroundColor: currentTheme.surface,
+        borderTop: `1px solid ${currentTheme.border}`,
         display: 'flex',
         zIndex: 1000
       }}>
