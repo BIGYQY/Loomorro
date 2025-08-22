@@ -150,7 +150,7 @@ app.post('/api/register', async (req, res) => {
 // 创建新目标接口（需要登录）
   app.post('/api/goals', authenticateToken, async (req, res) => {
     try {
-      const { title, description, parent_id, status, priority } = req.body;
+      const { title, description, parent_id, status, priority, file_id } = req.body;
       const user_id = req.user.userId; // 从JWT token中获取用户ID
 
       // 验证必填字段
@@ -161,10 +161,10 @@ app.post('/api/register', async (req, res) => {
       // 插入新目标
       const newGoal = await pool.query(
         `INSERT INTO goals
-         (user_id, parent_id, title, description, status, priority, created_at, updated_at, order_index)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), 0)
+         (user_id, parent_id, title, description, status, priority, created_at, updated_at, order_index, file_id)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), 0, $7)
          RETURNING *`,
-        [user_id, parent_id || null, title, description || '', status || 'active', priority || 1]
+        [user_id, parent_id || null, title, description || '', status || 'active', priority || 1, file_id || null]
       );
 
       res.status(201).json({
@@ -182,12 +182,22 @@ app.post('/api/register', async (req, res) => {
 app.get('/api/goals', authenticateToken, async (req, res) => {
   try {
     const user_id = req.user.userId; // 从JWT获取用户ID
+    const { file_id } = req.query; // 获取文件ID参数
     
-    // 查询该用户的所有目标
-    const goals = await pool.query(
-      'SELECT * FROM goals WHERE user_id = $1 ORDER BY created_at DESC',
-      [user_id]
-    );
+    let goals;
+    if (file_id) {
+      // 查询指定文件的目标
+      goals = await pool.query(
+        'SELECT * FROM goals WHERE user_id = $1 AND file_id = $2 ORDER BY created_at DESC',
+        [user_id, file_id]
+      );
+    } else {
+      // 查询该用户的所有目标（向后兼容）
+      goals = await pool.query(
+        'SELECT * FROM goals WHERE user_id = $1 ORDER BY created_at DESC',
+        [user_id]
+      );
+    }
     
     res.json({
       message: '获取目标列表成功！',
@@ -302,6 +312,99 @@ app.delete('/api/goals/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ==================== 文件管理接口 ====================
+
+// 获取用户所有文件
+app.get('/api/files', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM files WHERE user_id = $1 ORDER BY created_at ASC',
+      [req.user.userId]
+    );
+
+    // 如果用户没有文件，创建默认文件
+    if (result.rows.length === 0) {
+      const defaultFile = await pool.query(
+        'INSERT INTO files (name, user_id) VALUES ($1, $2) RETURNING *',
+        ['我的理想规划', req.user.userId]
+      );
+      return res.json({ files: defaultFile.rows });
+    }
+
+    res.json({ files: result.rows });
+  } catch (error) {
+    console.error('获取文件列表失败:', error);
+    res.status(500).json({ error: '获取文件列表失败' });
+  }
+});
+
+// 创建新文件
+app.post('/api/files', authenticateToken, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: '文件名不能为空' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO files (name, user_id) VALUES ($1, $2) RETURNING *',
+      [name.trim(), req.user.userId]
+    );
+
+    res.status(201).json({ file: result.rows[0] });
+  } catch (error) {
+    console.error('创建文件失败:', error);
+    res.status(500).json({ error: '创建文件失败' });
+  }
+});
+
+// 更新文件名
+app.put('/api/files/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: '文件名不能为空' });
+    }
+
+    const result = await pool.query(
+      'UPDATE files SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *',
+      [name.trim(), id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '文件不存在或无权限访问' });
+    }
+
+    res.json({ file: result.rows[0] });
+  } catch (error) {
+    console.error('更新文件失败:', error);
+    res.status(500).json({ error: '更新文件失败' });
+  }
+});
+
+// 删除文件
+app.delete('/api/files/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'DELETE FROM files WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '文件不存在或无权限访问' });
+    }
+
+    res.json({ message: '文件删除成功', file: result.rows[0] });
+  } catch (error) {
+    console.error('删除文件失败:', error);
+    res.status(500).json({ error: '删除文件失败' });
+  }
+});
 
 // 启动服务器
 app.listen(PORT, () => {

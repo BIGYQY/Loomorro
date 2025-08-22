@@ -18,6 +18,11 @@ const Goals = ({ onLogout }) => {
   // 主题切换状态
   const [isDarkMode, setIsDarkMode] = useState(false); // 默认盛夏晨曦主题
   
+  // 文件管理状态
+  const [currentFile, setCurrentFile] = useState(null);
+  const [allFiles, setAllFiles] = useState([]);
+  const [showFileDropdown, setShowFileDropdown] = useState(false);
+  
   // 画布相关状态
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -27,6 +32,110 @@ const Goals = ({ onLogout }) => {
 
   // 获取token
   const getToken = () => localStorage.getItem('token');
+
+  // 文件管理函数
+  const fetchFiles = async () => {
+    try {
+      const token = getToken();
+      const response = await axios.get('http://localhost:3001/api/files', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const files = response.data.files;
+      setAllFiles(files);
+      
+      // 设置当前文件为第一个文件
+      if (files && files.length > 0 && !currentFile) {
+        setCurrentFile(files[0]);
+        return files[0];
+      }
+      return currentFile;
+    } catch (error) {
+      console.error('获取文件列表错误:', error);
+      setMessage('获取文件列表失败');
+      return null;
+    }
+  };
+
+  const createFile = async (name) => {
+    try {
+      const token = getToken();
+      const response = await axios.post('http://localhost:3001/api/files', {
+        name: name
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const newFile = response.data.file;
+      setAllFiles([...allFiles, newFile]);
+      setCurrentFile(newFile);
+      setMessage('文件创建成功！');
+      return newFile;
+    } catch (error) {
+      console.error('创建文件错误:', error);
+      const errorMsg = error.response?.data?.error || error.message || '创建文件失败';
+      setMessage(`创建文件失败: ${errorMsg}`);
+      return null;
+    }
+  };
+
+  const updateFileName = async (fileId, newName) => {
+    try {
+      const token = getToken();
+      await axios.put(`http://localhost:3001/api/files/${fileId}`, {
+        name: newName
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      setAllFiles(allFiles.map(f => 
+        f.id === fileId ? { ...f, name: newName } : f
+      ));
+      
+      if (currentFile && currentFile.id === fileId) {
+        setCurrentFile({ ...currentFile, name: newName });
+      }
+      setMessage('文件重命名成功！');
+    } catch (error) {
+      setMessage('重命名文件失败');
+    }
+  };
+
+  const deleteFile = async (fileId) => {
+    if (allFiles.length <= 1) {
+      setMessage('至少需要保留一个文件');
+      return;
+    }
+    
+    try {
+      const token = getToken();
+      await axios.delete(`http://localhost:3001/api/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const remainingFiles = allFiles.filter(f => f.id !== fileId);
+      setAllFiles(remainingFiles);
+      
+      if (currentFile && currentFile.id === fileId && remainingFiles.length > 0) {
+        setCurrentFile(remainingFiles[0]);
+        fetchGoals(remainingFiles[0].id);
+      }
+      setMessage('文件删除成功！');
+    } catch (error) {
+      setMessage('删除文件失败');
+    }
+  };
+
+  const switchToFile = async (file) => {
+    setCurrentFile(file);
+    setShowFileDropdown(false);
+    await fetchGoals(file.id);
+  };
 
   // 主题切换
   const toggleTheme = () => {
@@ -107,16 +216,26 @@ const Goals = ({ onLogout }) => {
   };
 
   // 获取目标列表
-  const fetchGoals = async () => {
+  const fetchGoals = async (fileId = null) => {
     try {
       const token = getToken();
-      const response = await axios.get('http://localhost:3001/api/goals', {
+      const targetFileId = fileId || (currentFile && currentFile.id);
+      
+      if (!targetFileId) {
+        // 没有文件ID时，清空目标列表
+        setAllGoals([]);
+        setTreeData([]);
+        return;
+      }
+      
+      const response = await axios.get(`http://localhost:3001/api/goals?file_id=${targetFileId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const goals = response.data.goals;
       setAllGoals(goals);
       setTreeData(buildTreeData(goals));
     } catch (error) {
+      console.error('获取目标错误:', error);
       setMessage('获取目标失败');
     }
   };
@@ -128,13 +247,19 @@ const Goals = ({ onLogout }) => {
       return;
     }
 
+    if (!currentFile || !currentFile.id) {
+      setMessage('请先选择一个文件');
+      return;
+    }
+
     setLoading(true);
     try {
       const token = getToken();
       await axios.post('http://localhost:3001/api/goals', {
         title: newGoalTitle,
         description: newGoalDescription,
-        parent_id: selectedGoal?.id || null
+        parent_id: selectedGoal?.id || null,
+        file_id: currentFile.id
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -388,10 +513,23 @@ const Goals = ({ onLogout }) => {
     return elements;
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // 初始化数据
   useEffect(() => {
-    fetchGoals();
+    const initializeData = async () => {
+      const firstFile = await fetchFiles();
+      if (firstFile) {
+        await fetchGoals(firstFile.id);
+      }
+    };
+    initializeData();
   }, []);
+
+  // 当切换文件时重新获取目标
+  useEffect(() => {
+    if (currentFile && currentFile.id) {
+      fetchGoals(currentFile.id);
+    }
+  }, [currentFile]);
 
   // 自动清除消息提示（但保留选中提示）
   useEffect(() => {
@@ -403,6 +541,24 @@ const Goals = ({ onLogout }) => {
       return () => clearTimeout(timer);
     }
   }, [message]);
+
+  // 点击外部关闭下拉菜单
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdown = document.querySelector('.file-dropdown');
+      if (dropdown && !dropdown.contains(event.target)) {
+        setShowFileDropdown(false);
+      }
+    };
+
+    if (showFileDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFileDropdown]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -708,6 +864,177 @@ const Goals = ({ onLogout }) => {
           >
             💀
           </button>
+          
+          {/* 文件管理按钮 */}
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowFileDropdown(!showFileDropdown)}
+              className="btn-fancy"
+              style={{
+                width: '48px',
+                height: '48px',
+                background: 'linear-gradient(135deg, #9c27b0, #673ab7)',
+                color: 'white',
+                fontSize: '18px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onMouseEnter={(e) => e.target.style.animation = 'pulse 0.4s ease'}
+              onAnimationEnd={(e) => e.target.style.animation = ''}
+            >
+              📁
+            </button>
+            
+            {/* 文件下拉菜单 */}
+            {showFileDropdown && (
+              <div 
+                className="file-dropdown"
+                style={{
+                  position: 'absolute',
+                  top: '55px',
+                  right: '0',
+                  minWidth: '250px',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  background: isDarkMode 
+                    ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.95) 0%, rgba(88, 86, 214, 0.95) 100%)'
+                    : 'linear-gradient(135deg, rgba(255, 230, 157, 0.95) 0%, rgba(255, 183, 104, 0.95) 100%)',
+                  backdropFilter: 'blur(15px)',
+                  borderRadius: '15px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  zIndex: 1000,
+                  padding: '10px',
+                  animation: 'slideDown 0.3s ease'
+                }}
+              >
+                {/* 文件列表标题 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '10px',
+                  paddingBottom: '8px',
+                  borderBottom: '1px solid rgba(255,255,255,0.2)'
+                }}>
+                  <span style={{
+                    color: isDarkMode ? '#fff' : currentTheme.text,
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}>📁 文件管理</span>
+                  <button
+                    onClick={async () => {
+                      const fileName = prompt('请输入文件名:');
+                      if (fileName && fileName.trim()) {
+                        await createFile(fileName.trim());
+                      }
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '4px 8px',
+                      color: isDarkMode ? '#fff' : currentTheme.text,
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + 新建
+                  </button>
+                </div>
+                
+                {/* 文件列表 */}
+                {allFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      marginBottom: '5px',
+                      borderRadius: '10px',
+                      background: currentFile?.id === file.id 
+                        ? 'rgba(255,255,255,0.3)' 
+                        : 'rgba(255,255,255,0.1)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (currentFile?.id !== file.id) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (currentFile?.id !== file.id) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+                      }
+                    }}
+                    onClick={() => switchToFile(file)}
+                  >
+                    <span style={{
+                      color: isDarkMode ? '#fff' : currentTheme.text,
+                      fontSize: '13px',
+                      fontWeight: currentFile?.id === file.id ? '600' : '500',
+                      maxWidth: '150px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {currentFile?.id === file.id ? '✅ ' : '📄 '}{file.name}
+                    </span>
+                    
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newName = prompt('请输入新文件名:', file.name);
+                          if (newName && newName.trim() && newName.trim() !== file.name) {
+                            updateFileName(file.id, newName.trim());
+                          }
+                        }}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '2px 6px',
+                          color: isDarkMode ? '#fff' : currentTheme.text,
+                          fontSize: '10px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      
+                      {allFiles.length > 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`确认删除文件 "${file.name}" 吗？`)) {
+                              deleteFile(file.id);
+                            }
+                          }}
+                          style={{
+                            background: 'rgba(255,0,0,0.3)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '2px 6px',
+                            color: '#fff',
+                            fontSize: '10px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
