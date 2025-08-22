@@ -66,6 +66,82 @@
   75% { transform: rotate(15deg) scale(1.1); }
 }
 
+/* 🌟 节点动效 */
+@keyframes nodeHover {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.05); }
+}
+
+@keyframes nodeSelected {
+  0%, 100% { 
+    transform: scale(1.02);
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  }
+  50% { 
+    transform: scale(1.06);
+    filter: drop-shadow(0 6px 20px rgba(0,0,0,0.4));
+  }
+}
+
+@keyframes nodeClick {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1.02); }
+}
+
+@keyframes nodeGlow {
+  0%, 100% { 
+    filter: drop-shadow(0 2px 8px rgba(255, 183, 104, 0.4));
+  }
+  50% { 
+    filter: drop-shadow(0 4px 15px rgba(255, 183, 104, 0.7));
+  }
+}
+
+@keyframes nodeGlowDark {
+  0%, 100% { 
+    filter: drop-shadow(0 2px 8px rgba(120, 119, 198, 0.4));
+  }
+  50% { 
+    filter: drop-shadow(0 4px 15px rgba(120, 119, 198, 0.7));
+  }
+}
+
+@keyframes nodeBreath {
+  0%, 100% { 
+    transform: scale(1);
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
+  }
+  50% { 
+    transform: scale(1.01);
+    filter: drop-shadow(0 3px 8px rgba(0,0,0,0.2));
+  }
+}
+
+/* 节点样式类 */
+.node-rect {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.node-rect:hover {
+  animation: nodeHover 0.3s ease forwards;
+}
+
+.node-rect.selected {
+  animation: nodeSelected 2s ease-in-out infinite;
+}
+
+.node-rect.clicked {
+  animation: nodeClick 0.4s ease;
+}
+
+.node-text {
+  transition: all 0.3s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
 @keyframes slideDown {
   0% {
     opacity: 0;
@@ -150,4 +226,22 @@
   transform: translateY(-2px);
   box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
   animation: glow 2s infinite;
+}
+
+/* 节点状态动效 */
+.node-normal {
+  animation: nodeBreath 4s ease-in-out infinite;
+}
+
+.node-hover {
+  animation: nodeGlow 1.5s ease-in-out infinite;
+}
+
+.node-hover-dark {
+  animation: nodeGlowDark 1.5s ease-in-out infinite;
+}
+
+/* 节点阴影效果增强 */
+.node-rect:not(.selected):not(.clicked) {
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
 }

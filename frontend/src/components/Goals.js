@@ -321,8 +321,24 @@ const Goals = ({ onLogout }) => {
             fill={selectedGoal?.id === node.id ? currentTheme.accent : currentTheme.surface}
             stroke={selectedGoal?.id === node.id ? currentTheme.primary : currentTheme.border}
             strokeWidth={selectedGoal?.id === node.id ? '3' : '2'}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setSelectedGoal(selectedGoal?.id === node.id ? null : node)}
+            className={`node-rect ${selectedGoal?.id === node.id ? 'selected' : 'node-normal'}`}
+            style={{ 
+              cursor: 'pointer',
+              transformOrigin: `${node.x + 60}px ${node.y + 30}px`
+            }}
+            onMouseEnter={(e) => {
+              if (selectedGoal?.id !== node.id) {
+                e.target.classList.add(isDarkMode ? 'node-hover-dark' : 'node-hover');
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.target.classList.remove('node-hover', 'node-hover-dark');
+            }}
+            onClick={(e) => {
+              e.target.classList.add('clicked');
+              setTimeout(() => e.target.classList.remove('clicked'), 400);
+              setSelectedGoal(selectedGoal?.id === node.id ? null : node);
+            }}
           />
           {/* 节点文字 */}
           <text
@@ -330,7 +346,9 @@ const Goals = ({ onLogout }) => {
             y={node.y + 25}
             textAnchor="middle"
             fontSize="12"
-            fill={currentTheme.text}
+            fontWeight={selectedGoal?.id === node.id ? '600' : '500'}
+            fill={selectedGoal?.id === node.id ? '#fff' : currentTheme.text}
+            className="node-text"
             style={{ pointerEvents: 'none' }}
           >
             {node.title.length > 10 ? node.title.substring(0, 10) + '...' : node.title}
@@ -341,7 +359,9 @@ const Goals = ({ onLogout }) => {
               y={node.y + 40}
               textAnchor="middle"
               fontSize="10"
-              fill={currentTheme.textSecondary}
+              fontWeight={selectedGoal?.id === node.id ? '500' : '400'}
+              fill={selectedGoal?.id === node.id ? 'rgba(255,255,255,0.9)' : currentTheme.textSecondary}
+              className="node-text"
               style={{ pointerEvents: 'none' }}
             >
               {node.description.length > 15 ? node.description.substring(0, 15) + '...' : node.description}
@@ -557,14 +577,26 @@ const Goals = ({ onLogout }) => {
             <span style={{ fontSize: '18px', transition: 'transform 0.3s ease' }}>{currentTheme.icon}</span>
             <span>{currentTheme.name}</span>
           </button>
-          <h1 style={{ 
-            margin: 0, 
-            fontSize: '20px', 
-            color: isDarkMode ? '#fff' : currentTheme.text,
-            fontWeight: '700',
-            textShadow: isDarkMode ? '0 2px 4px rgba(0,0,0,0.5)' : '0 2px 4px rgba(0,0,0,0.1)',
-            letterSpacing: '0.5px'
-          }}>🌳 Loomorro</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img 
+              src="/logo.png" 
+              alt="Logo" 
+              style={{
+                height: '35px',
+                width: 'auto',
+                filter: isDarkMode ? 'brightness(1.2)' : 'none',
+                transition: 'all 0.3s ease'
+              }}
+            />
+            <h1 style={{ 
+              margin: 0, 
+              fontSize: '20px', 
+              color: isDarkMode ? '#fff' : currentTheme.text,
+              fontWeight: '700',
+              textShadow: isDarkMode ? '0 2px 4px rgba(0,0,0,0.5)' : '0 2px 4px rgba(0,0,0,0.1)',
+              letterSpacing: '0.5px'
+            }}>Loomorro</h1>
+          </div>
         </div>
         
         {/* 中间提示信息区域 */}
@@ -693,8 +725,7 @@ const Goals = ({ onLogout }) => {
           position: 'relative',
           borderRadius: '15px',
           margin: '10px',
-          boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05), 0 4px 20px rgba(0,0,0,0.1)',
-          border: `2px solid ${currentTheme.border}`
+          boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)'
         }}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
