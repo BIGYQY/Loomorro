@@ -6,6 +6,26 @@ const Goals = ({ onLogout }) => {
   const [treeData, setTreeData] = useState([]);
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [currentView, setCurrentView] = useState('workspace'); // 'workspace' or 'profile'
+
+  // 获取优先级表情
+  const getPriorityEmoji = (priority) => {
+    switch (priority) {
+      case 3: return '😡'; // 高优先级 - 愤怒
+      case 2: return '😐'; // 中优先级 - 中性
+      case 1: return '😊'; // 低优先级 - 轻松
+      default: return null; // 无优先级
+    }
+  };
+
+  // 获取优先级背景色
+  const getPriorityBgColor = (priority) => {
+    switch (priority) {
+      case 3: return '#ff4757'; // 红色背景
+      case 2: return '#ffa502'; // 橙色背景  
+      case 1: return '#2ed573'; // 绿色背景
+      default: return 'transparent';
+    }
+  };
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -14,6 +34,7 @@ const Goals = ({ onLogout }) => {
   const [newGoalDescription, setNewGoalDescription] = useState('');
   const [editGoalTitle, setEditGoalTitle] = useState('');
   const [editGoalDescription, setEditGoalDescription] = useState('');
+  const [editGoalPriority, setEditGoalPriority] = useState(0); // 0=无优先级, 1=低, 2=中, 3=高
   
   // 主题切换状态
   const [isDarkMode, setIsDarkMode] = useState(false); // 默认盛夏晨曦主题
@@ -348,6 +369,7 @@ const Goals = ({ onLogout }) => {
     if (!selectedGoal) return;
     setEditGoalTitle(selectedGoal.title);
     setEditGoalDescription(selectedGoal.description || '');
+    setEditGoalPriority(selectedGoal.priority || 0);
     setShowEditDialog(true);
   };
 
@@ -363,7 +385,8 @@ const Goals = ({ onLogout }) => {
       const token = getToken();
       await axios.put(`http://localhost:3001/api/goals/${selectedGoal.id}`, {
         title: editGoalTitle,
-        description: editGoalDescription
+        description: editGoalDescription,
+        priority: editGoalPriority
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -374,6 +397,7 @@ const Goals = ({ onLogout }) => {
       setMessage('编辑成功！');
       setEditGoalTitle('');
       setEditGoalDescription('');
+      setEditGoalPriority(0);
       setShowEditDialog(false);
       fetchGoals();
     } catch (error) {
@@ -523,6 +547,35 @@ const Goals = ({ onLogout }) => {
           >
             {node.title}
           </text>
+          {/* 优先级表情 - 微信气泡样式 */}
+          {getPriorityEmoji(node.priority) && (
+            <g>
+              {/* 优先级背景圆圈 - 位于节点外面，与右上角圆角重叠 */}
+              <circle
+                cx={node.x + node.width - 3}
+                cy={node.y + 3}
+                r="11"
+                fill={getPriorityBgColor(node.priority)}
+                stroke="rgba(255,255,255,0.9)"
+                strokeWidth="2"
+                style={{ 
+                  pointerEvents: 'none',
+                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+                }}
+              />
+              {/* 优先级表情 */}
+              <text
+                x={node.x + node.width - 3}
+                y={node.y + 8}
+                textAnchor="middle"
+                fontSize="13"
+                style={{ pointerEvents: 'none' }}
+              >
+                {getPriorityEmoji(node.priority)}
+              </text>
+            </g>
+          )}
+          
           {/* 子节点数量 */}
           {node.children && node.children.length > 0 && (
             <text
@@ -624,9 +677,10 @@ const Goals = ({ onLogout }) => {
         {/* 个人资料内容 */}
         <div style={{ 
           padding: '40px 25px',
-          paddingBottom: '100px', // 为底部导航留出空间
+          paddingBottom: '80px', // 为底部导航留出空间
           textAlign: 'center',
-          minHeight: 'calc(100vh - 60px)'
+          minHeight: 'calc(100vh - 70px)', // 减去顶部工具栏高度
+          boxSizing: 'border-box'
         }}>
           
           {/* JMN头像 */}
@@ -761,50 +815,80 @@ const Goals = ({ onLogout }) => {
           left: 0,
           right: 0,
           height: '60px',
-          background: isDarkMode 
-            ? 'rgba(30, 30, 30, 0.95)'
-            : 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(20px)',
-          borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+          borderTop: `2px solid ${currentTheme.border}`,
           display: 'flex',
           zIndex: 1000
         }}>
+          {/* 工作区按钮 */}
           <button
             onClick={() => setCurrentView('workspace')}
             className="nav-button"
             style={{
               flex: 1,
               border: 'none',
-              backgroundColor: 'transparent',
+              background: currentView === 'workspace' 
+                ? (isDarkMode 
+                    ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.9) 0%, rgba(88, 86, 214, 0.9) 100%)' // 深色
+                    : 'linear-gradient(135deg, rgba(255, 230, 157, 0.9) 0%, rgba(255, 183, 104, 0.9) 100%)') // 深色
+                : (isDarkMode 
+                    ? 'rgba(60, 103, 220, 0.3)' // 浅色
+                    : 'rgba(255, 183, 104, 0.3)'), // 浅色
               fontSize: '14px',
-              color: isDarkMode ? 'rgba(255,255,255,0.6)' : '#666',
+              color: currentView === 'workspace' ? '#fff' : 'rgba(255,255,255,0.7)',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              fontWeight: currentView === 'workspace' ? '700' : '500',
+              textShadow: currentView === 'workspace' ? '0 1px 3px rgba(0,0,0,0.3)' : 'none',
+              transition: 'all 0.3s ease',
+              borderTopRightRadius: currentView === 'workspace' ? '20px' : '0px',
+              borderBottomRightRadius: currentView === 'profile' ? '20px' : '0px'
             }}
           >
-            <div style={{ fontSize: '20px', marginBottom: '2px' }}>🎯</div>
+            <div style={{ 
+              fontSize: currentView === 'workspace' ? '22px' : '20px', 
+              marginBottom: '2px',
+              transition: 'all 0.3s ease'
+            }}>🎯</div>
             <div>工作区</div>
           </button>
+          
+          {/* 我的按钮 */}
           <button
             onClick={() => setCurrentView('profile')}
-            className="nav-button active"
+            className="nav-button"
             style={{
               flex: 1,
               border: 'none',
-              backgroundColor: 'transparent',
+              background: currentView === 'profile' 
+                ? (isDarkMode 
+                    ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.9) 0%, rgba(88, 86, 214, 0.9) 100%)' // 深色
+                    : 'linear-gradient(135deg, rgba(255, 230, 157, 0.9) 0%, rgba(255, 183, 104, 0.9) 100%)') // 深色
+                : (isDarkMode 
+                    ? 'rgba(60, 103, 220, 0.3)' // 浅色
+                    : 'rgba(255, 183, 104, 0.3)'), // 浅色
               fontSize: '14px',
-              color: isDarkMode ? '#667eea' : '#fd79a8',
+              color: currentView === 'profile' ? '#fff' : 'rgba(255,255,255,0.7)',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              fontWeight: currentView === 'profile' ? '700' : '500',
+              textShadow: currentView === 'profile' ? '0 1px 3px rgba(0,0,0,0.3)' : 'none',
+              transition: 'all 0.3s ease',
+              borderTopLeftRadius: currentView === 'profile' ? '20px' : '0px',
+              borderBottomLeftRadius: currentView === 'workspace' ? '20px' : '0px'
             }}
           >
-            <div style={{ fontSize: '20px', marginBottom: '2px' }}>👤</div>
+            <div style={{ 
+              fontSize: currentView === 'profile' ? '22px' : '20px', 
+              marginBottom: '2px',
+              transition: 'all 0.3s ease'
+            }}>👤</div>
             <div>我的</div>
           </button>
         </div>
@@ -1192,7 +1276,7 @@ const Goals = ({ onLogout }) => {
       <div
         ref={canvasRef}
         style={{
-          height: 'calc(100vh - 130px)',
+          height: 'calc(100vh - 70px - 60px)', // 减去顶部工具栏70px + 底部导航60px
           background: isDarkMode 
             ? `radial-gradient(circle at 30% 40%, rgba(120, 119, 198, 0.15), transparent 70%), ${currentTheme.background}`
             : `radial-gradient(circle at 30% 40%, rgba(255, 183, 104, 0.1), transparent 70%), ${currentTheme.background}`,
@@ -1201,6 +1285,8 @@ const Goals = ({ onLogout }) => {
           position: 'relative',
           borderRadius: '15px',
           margin: '10px',
+          marginBottom: '70px', // 为底部导航留出空间
+          boxSizing: 'border-box',
           boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)'
         }}
         onMouseDown={handleMouseDown}
@@ -1232,61 +1318,6 @@ const Goals = ({ onLogout }) => {
             {renderAllNodes(treeData)}
           </svg>
         )}
-      </div>
-
-      {/* 底部导航栏 */}
-      <div style={{
-        position: 'fixed',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '60px',
-        background: isDarkMode 
-          ? 'rgba(30, 30, 30, 0.95)'
-          : 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(20px)',
-        borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-        display: 'flex',
-        zIndex: 1000
-      }}>
-        <button
-          onClick={() => setCurrentView('workspace')}
-          className="nav-button active"
-          style={{
-            flex: 1,
-            border: 'none',
-            backgroundColor: 'transparent',
-            fontSize: '14px',
-            color: isDarkMode ? '#667eea' : '#fd79a8',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          <div style={{ fontSize: '20px', marginBottom: '2px' }}>🎯</div>
-          <div>工作区</div>
-        </button>
-        <button
-          onClick={() => setCurrentView('profile')}
-          className="nav-button"
-          style={{
-            flex: 1,
-            border: 'none',
-            backgroundColor: 'transparent',
-            fontSize: '14px',
-            color: isDarkMode ? 'rgba(255,255,255,0.6)' : '#666',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          <div style={{ fontSize: '20px', marginBottom: '2px' }}>👤</div>
-          <div>我的</div>
-        </button>
       </div>
 
       {/* 添加目标对话框 */}
@@ -1432,12 +1463,42 @@ const Goals = ({ onLogout }) => {
               style={{
                 width: '100%',
                 padding: '10px',
-                marginBottom: '20px',
+                marginBottom: '15px',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
                 fontSize: '16px'
               }}
             />
+            
+            {/* 优先级选择 */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '8px', 
+                fontSize: '14px', 
+                color: '#333',
+                fontWeight: '500'
+              }}>
+                焦虑等级（优先级）
+              </label>
+              <select
+                value={editGoalPriority}
+                onChange={(e) => setEditGoalPriority(parseInt(e.target.value))}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  backgroundColor: 'white'
+                }}
+              >
+                <option value={0}>🔘 无优先级</option>
+                <option value={1}>😊 低优先级（轻松）</option>
+                <option value={2}>😐 中优先级（适中）</option>
+                <option value={3}>😡 高优先级（紧急）</option>
+              </select>
+            </div>
             
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
@@ -1445,6 +1506,7 @@ const Goals = ({ onLogout }) => {
                   setShowEditDialog(false);
                   setEditGoalTitle('');
                   setEditGoalDescription('');
+                  setEditGoalPriority(0);
                 }}
                 style={{
                   flex: 1,
@@ -1476,6 +1538,91 @@ const Goals = ({ onLogout }) => {
           </div>
         </div>
       )}
+
+      {/* 统一的底部导航栏 - 浏览器标签页样式 */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        backdropFilter: 'blur(20px)',
+        borderTop: `2px solid ${currentTheme.border}`,
+        display: 'flex',
+        zIndex: 1000
+      }}>
+        {/* 工作区按钮 */}
+        <button
+          onClick={() => setCurrentView('workspace')}
+          className="nav-button"
+          style={{
+            flex: 1,
+            border: 'none',
+            background: currentView === 'workspace' 
+              ? (isDarkMode 
+                  ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.95) 0%, rgba(88, 86, 214, 0.95) 100%)' // 静谧海洋深色
+                  : 'linear-gradient(135deg, rgba(255, 230, 157, 0.95) 0%, rgba(255, 183, 104, 0.95) 100%)') // 盛夏晨曦深色
+              : (isDarkMode 
+                  ? 'rgba(60, 103, 220, 0.3)' // 静谧海洋浅色
+                  : 'rgba(255, 183, 104, 0.3)'), // 盛夏晨曦浅色
+            fontSize: '14px',
+            color: currentView === 'workspace' ? '#fff' : 'rgba(255,255,255,0.7)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: currentView === 'workspace' ? '700' : '500',
+            textShadow: currentView === 'workspace' ? '0 1px 3px rgba(0,0,0,0.3)' : 'none',
+            transition: 'all 0.3s ease',
+            borderTopRightRadius: currentView === 'workspace' ? '20px' : '0px',
+            borderBottomRightRadius: currentView === 'profile' ? '20px' : '0px'
+          }}
+        >
+          <div style={{ 
+            fontSize: currentView === 'workspace' ? '22px' : '20px', 
+            marginBottom: '2px',
+            transition: 'all 0.3s ease'
+          }}>🎯</div>
+          <div>工作区</div>
+        </button>
+        
+        {/* 我的按钮 */}
+        <button
+          onClick={() => setCurrentView('profile')}
+          className="nav-button"
+          style={{
+            flex: 1,
+            border: 'none',
+            background: currentView === 'profile' 
+              ? (isDarkMode 
+                  ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.95) 0%, rgba(88, 86, 214, 0.95) 100%)' // 静谧海洋深色
+                  : 'linear-gradient(135deg, rgba(255, 230, 157, 0.95) 0%, rgba(255, 183, 104, 0.95) 100%)') // 盛夏晨曦深色
+              : (isDarkMode 
+                  ? 'rgba(60, 103, 220, 0.3)' // 静谧海洋浅色
+                  : 'rgba(255, 183, 104, 0.3)'), // 盛夏晨曦浅色
+            fontSize: '14px',
+            color: currentView === 'profile' ? '#fff' : 'rgba(255,255,255,0.7)',
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: currentView === 'profile' ? '700' : '500',
+            textShadow: currentView === 'profile' ? '0 1px 3px rgba(0,0,0,0.3)' : 'none',
+            transition: 'all 0.3s ease',
+            borderTopLeftRadius: currentView === 'profile' ? '20px' : '0px',
+            borderBottomLeftRadius: currentView === 'workspace' ? '20px' : '0px'
+          }}
+        >
+          <div style={{ 
+            fontSize: currentView === 'profile' ? '22px' : '20px', 
+            marginBottom: '2px',
+            transition: 'all 0.3s ease'
+          }}>👤</div>
+          <div>我的</div>
+        </button>
+      </div>
     </div>
   );
 };

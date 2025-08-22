@@ -337,21 +337,18 @@
   overflow: hidden;
 }
 
-.nav-button.active {
-  transform: translateY(-2px);
+.nav-button:hover:not(.active) {
+  color: rgba(255,255,255,0.8) !important;
+  transform: translateY(-1px);
 }
 
-.nav-button.active::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 3px;
-  border-radius: 2px;
-  background: currentColor;
-  animation: slideDown 0.3s ease;
+.nav-button.active {
+  filter: drop-shadow(0 2px 8px rgba(255, 183, 4, 0.3));
+}
+
+.nav-button.active:hover {
+  transform: scale(1.08) !important;
+  filter: drop-shadow(0 4px 12px rgba(255, 183, 4, 0.5));
 }
 
 /* 退出按钮动画 */
@@ -368,4 +365,9 @@
 .logout-button:hover {
   animation: logoutPulse 0.6s ease;
   box-shadow: 0 8px 25px rgba(244, 67, 54, 0.3);
+}
+
+/* 底部导航简洁样式 */
+.nav-button {
+  transition: all 0.3s ease;
 }
