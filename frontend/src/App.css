@@ -36,3 +36,118 @@
     transform: rotate(360deg);
   }
 }
+
+/* 🎯 按钮动画效果 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0) scale(1.05); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px) scale(1.05); }
+  20%, 40%, 60%, 80% { transform: translateX(2px) scale(1.05); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes bounce {
+  0%, 20%, 60%, 100% { transform: translateY(0) scale(1); }
+  40% { transform: translateY(-8px) scale(1.05); }
+  80% { transform: translateY(-4px) scale(1.02); }
+}
+
+@keyframes rotate {
+  0% { transform: rotate(0deg) scale(1); }
+  100% { transform: rotate(360deg) scale(1.1); }
+}
+
+@keyframes hammer {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-15deg) scale(1.1); }
+  75% { transform: rotate(15deg) scale(1.1); }
+}
+
+@keyframes slideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-15px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(76, 175, 80, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(76, 175, 80, 0.6), 0 0 30px rgba(76, 175, 80, 0.3); }
+}
+
+/* 按钮样式类 */
+.btn-fancy {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  border: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-fancy:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.btn-fancy:active {
+  animation: pulse 0.3s ease;
+}
+
+.btn-fancy::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transform: translate(-50%, -50%);
+  transition: width 0.6s, height 0.6s;
+}
+
+.btn-fancy:active::after {
+  width: 300px;
+  height: 300px;
+}
+
+.theme-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 25px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.theme-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 25px rgba(102, 126, 234, 0.4);
+  animation: glow 2s infinite;
+}

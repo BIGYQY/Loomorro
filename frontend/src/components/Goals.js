@@ -373,6 +373,17 @@ const Goals = ({ onLogout }) => {
     fetchGoals();
   }, []);
 
+  // 自动清除消息提示（但保留选中提示）
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => {
+        setMessage('');
+      }, 2500); // 2.5秒后自动清除
+      
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -483,64 +494,141 @@ const Goals = ({ onLogout }) => {
     <div style={{ height: '100vh', backgroundColor: currentTheme.background }}>
       {/* 顶部工具栏 */}
       <div style={{
-        height: '60px',
-        backgroundColor: currentTheme.surface,
-        borderBottom: `1px solid ${currentTheme.border}`,
+        height: '70px',
+        background: isDarkMode 
+          ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.95) 0%, rgba(88, 86, 214, 0.95) 100%)'
+          : 'linear-gradient(135deg, rgba(255, 230, 157, 0.95) 0%, rgba(255, 183, 104, 0.95) 100%)',
+        borderBottom: `2px solid ${currentTheme.border}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 20px',
+        padding: '0 25px',
         position: 'sticky',
         top: 0,
-        zIndex: 100
+        zIndex: 100,
+        boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+        backdropFilter: 'blur(15px)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '18px',
+          background: 'rgba(255,255,255,0.1)',
+          padding: '10px 18px',
+          borderRadius: '25px',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+        }}>
           <button
             onClick={toggleTheme}
+            className="theme-btn"
             style={{
-              height: '36px',
-              paddingLeft: '12px',
-              paddingRight: '12px',
-              borderRadius: '18px',
-              border: `2px solid ${currentTheme.border}`,
-              backgroundColor: currentTheme.surface,
-              color: currentTheme.text,
+              height: '42px',
+              paddingLeft: '16px',
+              paddingRight: '16px',
+              borderRadius: '25px',
+              border: 'none',
+              background: isDarkMode 
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+              color: isDarkMode ? '#fff' : '#5D4037',
               fontSize: '14px',
-              fontWeight: '500',
+              fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
-              transition: 'all 0.3s ease',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              gap: '8px',
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: isDarkMode ? '0 4px 15px rgba(102, 126, 234, 0.3)' : '0 4px 15px rgba(255, 183, 104, 0.3)',
+              transform: 'translateY(0)'
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = isDarkMode ? '0 6px 25px rgba(102, 126, 234, 0.5)' : '0 6px 25px rgba(255, 183, 104, 0.5)';
+              e.target.style.filter = 'brightness(1.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = isDarkMode ? '0 4px 15px rgba(102, 126, 234, 0.3)' : '0 4px 15px rgba(255, 183, 104, 0.3)';
+              e.target.style.filter = 'brightness(1)';
             }}
           >
-            <span style={{ fontSize: '16px' }}>{currentTheme.icon}</span>
+            <span style={{ fontSize: '18px', transition: 'transform 0.3s ease' }}>{currentTheme.icon}</span>
             <span>{currentTheme.name}</span>
           </button>
-          <h1 style={{ margin: 0, fontSize: '18px', color: currentTheme.text }}>🌳 Loomorro</h1>
+          <h1 style={{ 
+            margin: 0, 
+            fontSize: '20px', 
+            color: isDarkMode ? '#fff' : currentTheme.text,
+            fontWeight: '700',
+            textShadow: isDarkMode ? '0 2px 4px rgba(0,0,0,0.5)' : '0 2px 4px rgba(0,0,0,0.1)',
+            letterSpacing: '0.5px'
+          }}>🌳 Loomorro</h1>
         </div>
         
+        {/* 中间提示信息区域 */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          {message && (
+            <div style={{
+              padding: '8px 16px',
+              backgroundColor: message.includes('成功') ? '#d4edda' : '#f8d7da',
+              color: message.includes('成功') ? '#155724' : '#721c24',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: '500',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              animation: 'fadeIn 0.3s ease',
+              border: '1px solid rgba(255,255,255,0.2)'
+            }}>
+              {message}
+            </div>
+          )}
+          
+          {selectedGoal && (
+            <div style={{
+              padding: '8px 16px',
+              backgroundColor: '#e3f2fd',
+              color: '#1976d2',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: '500',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              animation: 'fadeIn 0.3s ease',
+              border: '1px solid rgba(255,255,255,0.2)'
+            }}>
+              已选中: {selectedGoal.title}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           {/* 显示当前缩放比例 */}
           <span style={{ fontSize: '12px', color: '#666' }}>{Math.round(scale * 100)}%</span>
           
           <button
             onClick={() => setShowAddDialog(true)}
+            className="btn-fancy"
             style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: '#4caf50',
+              width: '48px',
+              height: '48px',
+              background: 'linear-gradient(135deg, #4caf50, #45a049)',
               color: 'white',
-              fontSize: '20px',
+              fontSize: '24px',
+              fontWeight: 'bold',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}
+            onMouseEnter={(e) => e.target.style.animation = 'rotate 0.8s ease'}
+            onAnimationEnd={(e) => e.target.style.animation = ''}
           >
             +
           </button>
@@ -548,19 +636,21 @@ const Goals = ({ onLogout }) => {
           <button
             onClick={handleEdit}
             disabled={!selectedGoal}
+            className="btn-fancy"
             style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: selectedGoal ? '#ff9800' : '#ccc',
+              width: '48px',
+              height: '48px',
+              background: selectedGoal ? 'linear-gradient(135deg, #ff9800, #f57c00)' : '#ccc',
               color: 'white',
-              fontSize: '16px',
+              fontSize: '18px',
               cursor: selectedGoal ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              filter: selectedGoal ? 'none' : 'grayscale(100%)'
             }}
+            onMouseEnter={(e) => selectedGoal && (e.target.style.animation = 'hammer 0.6s ease')}
+            onAnimationEnd={(e) => e.target.style.animation = ''}
           >
             🔨
           </button>
@@ -568,70 +658,43 @@ const Goals = ({ onLogout }) => {
           <button
             onClick={handleDelete}
             disabled={!selectedGoal}
+            className="btn-fancy"
             style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: selectedGoal ? '#f44336' : '#ccc',
+              width: '48px',
+              height: '48px',
+              background: selectedGoal ? 'linear-gradient(135deg, #f44336, #d32f2f)' : '#ccc',
               color: 'white',
-              fontSize: '16px',
+              fontSize: '18px',
               cursor: selectedGoal ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              filter: selectedGoal ? 'none' : 'grayscale(100%)'
             }}
+            onMouseEnter={(e) => selectedGoal && (e.target.style.animation = 'pulse 0.4s ease')}
+            onAnimationEnd={(e) => e.target.style.animation = ''}
           >
-            🗑️
+            💀
           </button>
         </div>
       </div>
 
-      {/* 消息提示 */}
-      {message && (
-        <div style={{
-          position: 'absolute',
-          top: '70px',
-          left: '20px',
-          right: '20px',
-          padding: '10px',
-          backgroundColor: message.includes('成功') ? '#d4edda' : '#f8d7da',
-          color: message.includes('成功') ? '#155724' : '#721c24',
-          borderRadius: '4px',
-          fontSize: '14px',
-          zIndex: 200
-        }}>
-          {message}
-        </div>
-      )}
-
-      {/* 选中提示 */}
-      {selectedGoal && (
-        <div style={{
-          position: 'absolute',
-          top: message ? '110px' : '70px',
-          left: '20px',
-          right: '20px',
-          padding: '10px',
-          backgroundColor: '#e3f2fd',
-          color: '#1976d2',
-          borderRadius: '4px',
-          fontSize: '14px',
-          zIndex: 200
-        }}>
-          已选中: {selectedGoal.title}
-        </div>
-      )}
 
       {/* 节点式画布 */}
       <div
         ref={canvasRef}
         style={{
-          height: 'calc(100vh - 120px)',
-          backgroundColor: currentTheme.background,
+          height: 'calc(100vh - 130px)',
+          background: isDarkMode 
+            ? `radial-gradient(circle at 30% 40%, rgba(120, 119, 198, 0.15), transparent 70%), ${currentTheme.background}`
+            : `radial-gradient(circle at 30% 40%, rgba(255, 183, 104, 0.1), transparent 70%), ${currentTheme.background}`,
           cursor: isDragging ? 'grabbing' : 'grab',
           overflow: 'hidden',
-          position: 'relative'
+          position: 'relative',
+          borderRadius: '15px',
+          margin: '10px',
+          boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05), 0 4px 20px rgba(0,0,0,0.1)',
+          border: `2px solid ${currentTheme.border}`
         }}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
