@@ -23,6 +23,10 @@ const Goals = ({ onLogout }) => {
   const [allFiles, setAllFiles] = useState([]);
   const [showFileDropdown, setShowFileDropdown] = useState(false);
   
+  // 用户信息状态
+  const [userInfo, setUserInfo] = useState(null);
+  const [fileCount, setFileCount] = useState(0);
+  
   // 画布相关状态
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -42,6 +46,7 @@ const Goals = ({ onLogout }) => {
       });
       const files = response.data.files;
       setAllFiles(files);
+      setFileCount(files.length); // 更新文件数量
       
       // 设置当前文件为第一个文件
       if (files && files.length > 0 && !currentFile) {
@@ -135,6 +140,31 @@ const Goals = ({ onLogout }) => {
     setCurrentFile(file);
     setShowFileDropdown(false);
     await fetchGoals(file.id);
+  };
+
+  // 获取用户信息
+  const fetchUserInfo = async () => {
+    try {
+      const token = getToken();
+      if (token) {
+        // 从 token 中解析用户信息
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setUserInfo({
+          email: payload.email,
+          userId: payload.userId
+        });
+      }
+    } catch (error) {
+      console.error('解析用户信息失败:', error);
+    }
+  };
+
+  // 退出登录
+  const handleLogout = () => {
+    if (window.confirm('确认退出登录吗？')) {
+      localStorage.removeItem('token');
+      onLogout();
+    }
   };
 
   // 主题切换
@@ -517,6 +547,7 @@ const Goals = ({ onLogout }) => {
   // 初始化数据
   useEffect(() => {
     const initializeData = async () => {
+      await fetchUserInfo(); // 获取用户信息
       const firstFile = await fetchFiles();
       if (firstFile) {
         await fetchGoals(firstFile.id);
@@ -579,38 +610,147 @@ const Goals = ({ onLogout }) => {
 
   // 我的页面
   if (currentView === 'profile') {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     return (
-      <div style={{ height: 'calc(100vh - 60px)', overflow: 'auto', padding: '20px', backgroundColor: 'white' }}>
-        <div style={{ textAlign: 'center', paddingTop: '50px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>👤</div>
-          <h2>我的信息</h2>
-          <div style={{ backgroundColor: '#f8f9fa', padding: '20px', borderRadius: '8px', marginTop: '20px', maxWidth: '300px', margin: '20px auto' }}>
-            <div style={{ marginBottom: '10px' }}>
-              <strong>用户名:</strong> {user.username}
-            </div>
-            <div style={{ marginBottom: '10px' }}>
-              <strong>邮箱:</strong> {user.email}
-            </div>
-            <div>
-              <strong>目标总数:</strong> {allGoals.length} 个
-            </div>
-          </div>
+      <div 
+        className="page-container"
+        style={{ 
+          height: '100vh', 
+          background: isDarkMode 
+            ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)'
+            : 'linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%)',
+          overflow: 'auto'
+        }}
+      >
+        {/* 个人资料内容 */}
+        <div style={{ 
+          padding: '40px 25px',
+          paddingBottom: '100px', // 为底部导航留出空间
+          textAlign: 'center',
+          minHeight: 'calc(100vh - 60px)'
+        }}>
           
-          <button
-            onClick={onLogout}
+          {/* JMN头像 */}
+          <div 
+            className="avatar-jmn"
             style={{
-              marginTop: '30px',
-              padding: '12px 24px',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '16px',
-              cursor: 'pointer'
+              background: isDarkMode 
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #fd79a8 0%, #fdcb6e 100%)',
+              color: '#fff',
+              textShadow: '0 2px 4px rgba(0,0,0,0.3)'
             }}
           >
-            退出登录
+            JMN
+          </div>
+
+          {/* 用户信息卡片 */}
+          <div 
+            className="info-card"
+            style={{
+              background: isDarkMode 
+                ? 'rgba(255,255,255,0.1)'
+                : 'rgba(255,255,255,0.8)',
+              maxWidth: '320px',
+              margin: '0 auto'
+            }}
+          >
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginBottom: '15px',
+              padding: '8px 0'
+            }}>
+              <span style={{ 
+                fontSize: '18px', 
+                marginRight: '12px',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+              }}>👤</span>
+              <div style={{ textAlign: 'left', flex: 1 }}>
+                <div style={{ 
+                  fontSize: '13px', 
+                  color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)',
+                  marginBottom: '2px',
+                  fontWeight: '500'
+                }}>用户名</div>
+                <div style={{ 
+                  fontSize: '16px', 
+                  color: isDarkMode ? '#fff' : currentTheme.text,
+                  fontWeight: '600'
+                }}>TestUser</div>
+              </div>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              marginBottom: '15px',
+              padding: '8px 0'
+            }}>
+              <span style={{ 
+                fontSize: '18px', 
+                marginRight: '12px',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+              }}>📧</span>
+              <div style={{ textAlign: 'left', flex: 1 }}>
+                <div style={{ 
+                  fontSize: '13px', 
+                  color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)',
+                  marginBottom: '2px',
+                  fontWeight: '500'
+                }}>邮箱</div>
+                <div style={{ 
+                  fontSize: '16px', 
+                  color: isDarkMode ? '#fff' : currentTheme.text,
+                  fontWeight: '600'
+                }}>{userInfo?.email || 'test@example.com'}</div>
+              </div>
+            </div>
+
+            <div style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              padding: '8px 0'
+            }}>
+              <span style={{ 
+                fontSize: '18px', 
+                marginRight: '12px',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+              }}>📁</span>
+              <div style={{ textAlign: 'left', flex: 1 }}>
+                <div style={{ 
+                  fontSize: '13px', 
+                  color: isDarkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.6)',
+                  marginBottom: '2px',
+                  fontWeight: '500'
+                }}>思维导图</div>
+                <div style={{ 
+                  fontSize: '16px', 
+                  color: isDarkMode ? '#fff' : currentTheme.text,
+                  fontWeight: '600'
+                }}>{fileCount} 个文件</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 退出登录按钮 */}
+          <button
+            onClick={handleLogout}
+            className="logout-button"
+            style={{
+              marginTop: '40px',
+              padding: '15px 40px',
+              background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '25px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(238, 90, 82, 0.3)',
+              minWidth: '160px'
+            }}
+          >
+            🚪 退出登录
           </button>
         </div>
         
@@ -621,19 +761,23 @@ const Goals = ({ onLogout }) => {
           left: 0,
           right: 0,
           height: '60px',
-          backgroundColor: 'white',
-          borderTop: '1px solid #ddd',
+          background: isDarkMode 
+            ? 'rgba(30, 30, 30, 0.95)'
+            : 'rgba(255, 255, 255, 0.95)',
+          backdropFilter: 'blur(20px)',
+          borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
           display: 'flex',
           zIndex: 1000
         }}>
           <button
             onClick={() => setCurrentView('workspace')}
+            className="nav-button"
             style={{
               flex: 1,
               border: 'none',
               backgroundColor: 'transparent',
               fontSize: '14px',
-              color: '#666',
+              color: isDarkMode ? 'rgba(255,255,255,0.6)' : '#666',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -641,17 +785,18 @@ const Goals = ({ onLogout }) => {
               justifyContent: 'center'
             }}
           >
-            <div style={{ fontSize: '20px' }}>🎯</div>
+            <div style={{ fontSize: '20px', marginBottom: '2px' }}>🎯</div>
             <div>工作区</div>
           </button>
           <button
             onClick={() => setCurrentView('profile')}
+            className="nav-button active"
             style={{
               flex: 1,
               border: 'none',
               backgroundColor: 'transparent',
               fontSize: '14px',
-              color: '#2196f3',
+              color: isDarkMode ? '#667eea' : '#fd79a8',
               cursor: 'pointer',
               display: 'flex',
               flexDirection: 'column',
@@ -659,7 +804,7 @@ const Goals = ({ onLogout }) => {
               justifyContent: 'center'
             }}
           >
-            <div style={{ fontSize: '20px' }}>👤</div>
+            <div style={{ fontSize: '20px', marginBottom: '2px' }}>👤</div>
             <div>我的</div>
           </button>
         </div>
@@ -668,7 +813,10 @@ const Goals = ({ onLogout }) => {
   }
 
   return (
-    <div style={{ height: '100vh', backgroundColor: currentTheme.background }}>
+    <div 
+      className="page-container"
+      style={{ height: '100vh', backgroundColor: currentTheme.background }}
+    >
       {/* 顶部工具栏 */}
       <div style={{
         height: '70px',
@@ -1093,19 +1241,23 @@ const Goals = ({ onLogout }) => {
         left: 0,
         right: 0,
         height: '60px',
-        backgroundColor: currentTheme.surface,
-        borderTop: `1px solid ${currentTheme.border}`,
+        background: isDarkMode 
+          ? 'rgba(30, 30, 30, 0.95)'
+          : 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(20px)',
+        borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
         display: 'flex',
         zIndex: 1000
       }}>
         <button
           onClick={() => setCurrentView('workspace')}
+          className="nav-button active"
           style={{
             flex: 1,
             border: 'none',
             backgroundColor: 'transparent',
             fontSize: '14px',
-            color: '#2196f3',
+            color: isDarkMode ? '#667eea' : '#fd79a8',
             cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
@@ -1113,17 +1265,18 @@ const Goals = ({ onLogout }) => {
             justifyContent: 'center'
           }}
         >
-          <div style={{ fontSize: '20px' }}>🎯</div>
+          <div style={{ fontSize: '20px', marginBottom: '2px' }}>🎯</div>
           <div>工作区</div>
         </button>
         <button
           onClick={() => setCurrentView('profile')}
+          className="nav-button"
           style={{
             flex: 1,
             border: 'none',
             backgroundColor: 'transparent',
             fontSize: '14px',
-            color: '#666',
+            color: isDarkMode ? 'rgba(255,255,255,0.6)' : '#666',
             cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
@@ -1131,7 +1284,7 @@ const Goals = ({ onLogout }) => {
             justifyContent: 'center'
           }}
         >
-          <div style={{ fontSize: '20px' }}>👤</div>
+          <div style={{ fontSize: '20px', marginBottom: '2px' }}>👤</div>
           <div>我的</div>
         </button>
       </div>
