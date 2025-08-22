@@ -173,11 +173,26 @@ const Goals = ({ onLogout }) => {
   
   const currentTheme = isDarkMode ? theme.ocean : theme.summer;
 
+  // 计算节点宽度基于标题长度
+  const calculateNodeWidth = (title) => {
+    const minWidth = 120;
+    const maxWidth = 300;
+    const charWidth = 8; // 每个字符大约8px
+    const padding = 20; // 左右内边距
+    
+    const calculatedWidth = Math.max(minWidth, Math.min(maxWidth, title.length * charWidth + padding));
+    return calculatedWidth;
+  };
+
   // 构建树状结构数据并计算位置
   const buildTreeData = (goals) => {
     const goalMap = {};
     goals.forEach(goal => {
-      goalMap[goal.id] = { ...goal, children: [] };
+      goalMap[goal.id] = { 
+        ...goal, 
+        children: [],
+        width: calculateNodeWidth(goal.title) // 添加动态宽度
+      };
     });
 
     const rootGoals = [];
@@ -192,7 +207,7 @@ const Goals = ({ onLogout }) => {
     // 计算节点位置
     const calculatePositions = (nodes, level = 0, startY = 100) => {
       let currentY = startY;
-      const nodeHeight = 80;
+      const nodeHeight = 60; // 40px节点 + 20px间距
       const nodeSpacing = 20;
       const levelSpacing = 200;
 
@@ -395,10 +410,10 @@ const Goals = ({ onLogout }) => {
       // 渲染连线到子节点（贝塞尔曲线）
       if (node.children) {
         node.children.forEach(child => {
-          const startX = node.x + 120;
-          const startY = node.y + 30;
+          const startX = node.x + node.width;
+          const startY = node.y + 20;
           const endX = child.x;
-          const endY = child.y + 30;
+          const endY = child.y + 20;
           
           // 计算贝塞尔曲线控制点
           const controlPoint1X = startX + (endX - startX) * 0.5;
@@ -430,8 +445,8 @@ const Goals = ({ onLogout }) => {
           <rect
             x={node.x + 2}
             y={node.y + 2}
-            width="120"
-            height="60"
+            width={node.width}
+            height="40"
             rx="12"
             fill="rgba(0,0,0,0.1)"
             style={{ pointerEvents: 'none' }}
@@ -440,8 +455,8 @@ const Goals = ({ onLogout }) => {
           <rect
             x={node.x}
             y={node.y}
-            width="120"
-            height="60"
+            width={node.width}
+            height="40"
             rx="12"
             fill={selectedGoal?.id === node.id ? currentTheme.accent : currentTheme.surface}
             stroke={selectedGoal?.id === node.id ? currentTheme.primary : currentTheme.border}
@@ -449,7 +464,7 @@ const Goals = ({ onLogout }) => {
             className={`node-rect ${selectedGoal?.id === node.id ? 'selected' : 'node-normal'}`}
             style={{ 
               cursor: 'pointer',
-              transformOrigin: `${node.x + 60}px ${node.y + 30}px`
+              transformOrigin: `${node.x + node.width/2}px ${node.y + 20}px`
             }}
             onMouseEnter={(e) => {
               if (selectedGoal?.id !== node.id) {
@@ -465,9 +480,9 @@ const Goals = ({ onLogout }) => {
               setSelectedGoal(selectedGoal?.id === node.id ? null : node);
             }}
           />
-          {/* 节点文字 */}
+          {/* 节点标题（只显示标题） */}
           <text
-            x={node.x + 60}
+            x={node.x + node.width/2}
             y={node.y + 25}
             textAnchor="middle"
             fontSize="12"
@@ -476,22 +491,8 @@ const Goals = ({ onLogout }) => {
             className="node-text"
             style={{ pointerEvents: 'none' }}
           >
-            {node.title.length > 10 ? node.title.substring(0, 10) + '...' : node.title}
+            {node.title}
           </text>
-          {node.description && (
-            <text
-              x={node.x + 60}
-              y={node.y + 40}
-              textAnchor="middle"
-              fontSize="10"
-              fontWeight={selectedGoal?.id === node.id ? '500' : '400'}
-              fill={selectedGoal?.id === node.id ? 'rgba(255,255,255,0.9)' : currentTheme.textSecondary}
-              className="node-text"
-              style={{ pointerEvents: 'none' }}
-            >
-              {node.description.length > 15 ? node.description.substring(0, 15) + '...' : node.description}
-            </text>
-          )}
           {/* 子节点数量 */}
           {node.children && node.children.length > 0 && (
             <text
