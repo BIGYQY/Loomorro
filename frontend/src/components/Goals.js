@@ -42,7 +42,15 @@ const Goals = ({ onLogout }) => {
   // 文件管理状态
   const [currentFile, setCurrentFile] = useState(null);
   const [allFiles, setAllFiles] = useState([]);
+  const [fileTree, setFileTree] = useState([]);
   const [showFileDropdown, setShowFileDropdown] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [expandedFolders, setExpandedFolders] = useState(new Set());
+  
+  // 文件夹导航状态
+  const [currentFolder, setCurrentFolder] = useState(null); // 当前所在文件夹
+  const [currentPath, setCurrentPath] = useState([]); // 当前路径面包屑
+  const [currentFolderContent, setCurrentFolderContent] = useState([]); // 当前文件夹内容
   
   // 用户信息状态
   const [userInfo, setUserInfo] = useState(null);
@@ -57,6 +65,180 @@ const Goals = ({ onLogout }) => {
 
   // 获取token
   const getToken = () => localStorage.getItem('token');
+  
+  // 获取当前文件夹的内容
+  const getCurrentFolderContent = () => {
+    if (currentFolder === null) {
+      // 根目录：显示所有没有parent_id的项目
+      return allFiles.filter(item => item.parent_id === null);
+    } else {
+      // 子文件夹：显示parent_id等于currentFolder的项目
+      return allFiles.filter(item => item.parent_id === currentFolder);
+    }
+  };
+  
+  // 进入文件夹
+  const enterFolder = (folder) => {
+    const newPath = [...currentPath, { id: folder.id, name: folder.name }];
+    setCurrentFolder(folder.id);
+    setCurrentPath(newPath);
+    setCurrentFolderContent(allFiles.filter(item => item.parent_id === folder.id));
+  };
+  
+  // 返回上级目录
+  const goBack = () => {
+    if (currentPath.length > 0) {
+      const newPath = [...currentPath];
+      newPath.pop();
+      setCurrentPath(newPath);
+      
+      if (newPath.length === 0) {
+        setCurrentFolder(null);
+      } else {
+        setCurrentFolder(newPath[newPath.length - 1].id);
+      }
+    }
+  };
+  
+  // 导航到指定路径
+  const navigateToPath = (pathIndex) => {
+    if (pathIndex === -1) {
+      // 回到根目录
+      setCurrentFolder(null);
+      setCurrentPath([]);
+    } else {
+      const newPath = currentPath.slice(0, pathIndex + 1);
+      setCurrentPath(newPath);
+      setCurrentFolder(newPath[newPath.length - 1].id);
+    }
+  };
+  
+  // 文件夹展开/收起控制
+  const toggleFolder = (folderId) => {
+    const newExpanded = new Set(expandedFolders);
+    if (newExpanded.has(folderId)) {
+      newExpanded.delete(folderId);
+    } else {
+      newExpanded.add(folderId);
+    }
+    setExpandedFolders(newExpanded);
+  };
+  
+  // 渲染当前文件夹内容
+  const renderCurrentFolder = () => {
+    const items = getCurrentFolderContent();
+    
+    return items.map((item) => (
+      <div key={item.id}>
+        <div
+          onClick={() => {
+            if (item.type === 'folder') {
+              // 单击选择文件夹（用于高亮显示）
+            } else {
+              setCurrentFile(item);
+              fetchGoals(item.id);
+              setShowFileDropdown(false);
+            }
+          }}
+          onDoubleClick={() => {
+            if (item.type === 'folder') {
+              // 双击进入文件夹
+              enterFolder(item);
+            }
+          }}
+          style={{
+            padding: '8px 12px',
+            cursor: 'pointer',
+            backgroundColor: currentFile && currentFile.id === item.id ? 
+              (isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)') : 'transparent',
+            borderRadius: '8px',
+            margin: '2px 0',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            transition: 'background-color 0.2s ease'
+          }}
+          onMouseEnter={(e) => {
+            if (currentFile?.id !== item.id) {
+              e.currentTarget.style.backgroundColor = isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (currentFile?.id !== item.id) {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <span style={{ marginRight: '8px', fontSize: '16px' }}>
+              {item.type === 'folder' ? '📁' : '📄'}
+            </span>
+            <span style={{
+              color: isDarkMode ? '#fff' : currentTheme.text,
+              fontSize: '13px',
+              fontWeight: currentFile && currentFile.id === item.id ? '600' : '400'
+            }}>
+              {item.name}
+            </span>
+            {item.type === 'folder' && (
+              <span style={{
+                marginLeft: '8px',
+                fontSize: '11px',
+                color: isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'
+              }}>
+                (双击进入)
+              </span>
+            )}
+          </div>
+          
+          {/* 操作按钮 */}
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                const newName = prompt(`请输入新${item.type === 'folder' ? '文件夹' : '文件'}名:`, item.name);
+                if (newName && newName.trim() && newName.trim() !== item.name) {
+                  updateFileName(item.id, newName.trim());
+                }
+              }}
+              style={{
+                padding: '4px 6px',
+                fontSize: '10px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                color: isDarkMode ? '#fff' : currentTheme.text,
+                cursor: 'pointer',
+                opacity: 0.8
+              }}
+            >
+              ✏️
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`确认删除${item.type === 'folder' ? '文件夹' : '文件'} "${item.name}" 吗？${item.type === 'folder' ? '这将删除文件夹内的所有内容！' : ''}`)) {
+                  deleteFile(item.id);
+                }
+              }}
+              style={{
+                padding: '4px 6px',
+                fontSize: '10px',
+                border: 'none',
+                borderRadius: '4px',
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                color: isDarkMode ? '#fff' : currentTheme.text,
+                cursor: 'pointer',
+                opacity: 0.8
+              }}
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+      </div>
+    ));
+  };
 
   // 文件管理函数
   const fetchFiles = async () => {
@@ -66,13 +248,18 @@ const Goals = ({ onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
       const files = response.data.files;
+      const tree = response.data.tree;
       setAllFiles(files);
+      setFileTree(tree);
       setFileCount(files.length); // 更新文件数量
       
-      // 设置当前文件为第一个文件
+      // 设置当前文件为第一个文件类型的项目
       if (files && files.length > 0 && !currentFile) {
-        setCurrentFile(files[0]);
-        return files[0];
+        const firstFile = files.find(f => f.type === 'file');
+        if (firstFile) {
+          setCurrentFile(firstFile);
+          return firstFile;
+        }
       }
       return currentFile;
     } catch (error) {
@@ -82,11 +269,13 @@ const Goals = ({ onLogout }) => {
     }
   };
 
-  const createFile = async (name) => {
+  const createFile = async (name, type = 'file', parent_id = null) => {
     try {
       const token = getToken();
       const response = await axios.post('http://localhost:3001/api/files', {
-        name: name
+        name: name,
+        type: type,
+        parent_id: parent_id
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -94,15 +283,20 @@ const Goals = ({ onLogout }) => {
         }
       });
       
-      const newFile = response.data.file;
-      setAllFiles([...allFiles, newFile]);
-      setCurrentFile(newFile);
-      setMessage('文件创建成功！');
-      return newFile;
+      const newItem = response.data.file;
+      await fetchFiles(); // 重新获取文件列表以更新树形结构
+      
+      if (type === 'file') {
+        setCurrentFile(newItem);
+        setMessage('文件创建成功！');
+      } else {
+        setMessage('文件夹创建成功！');
+      }
+      return newItem;
     } catch (error) {
-      console.error('创建文件错误:', error);
-      const errorMsg = error.response?.data?.error || error.message || '创建文件失败';
-      setMessage(`创建文件失败: ${errorMsg}`);
+      console.error('创建失败:', error);
+      const errorMsg = error.response?.data?.error || error.message || '创建失败';
+      setMessage(`创建失败: ${errorMsg}`);
       return null;
     }
   };
@@ -633,6 +827,7 @@ const Goals = ({ onLogout }) => {
       const dropdown = document.querySelector('.file-dropdown');
       if (dropdown && !dropdown.contains(event.target)) {
         setShowFileDropdown(false);
+        setShowCreateMenu(false);
       }
     };
 
@@ -1128,8 +1323,8 @@ const Goals = ({ onLogout }) => {
                   position: 'absolute',
                   top: '55px',
                   right: '0',
-                  minWidth: '250px',
-                  maxHeight: '300px',
+                  minWidth: '450px',
+                  maxHeight: '500px',
                   overflowY: 'auto',
                   background: isDarkMode 
                     ? 'linear-gradient(135deg, rgba(60, 103, 220, 0.95) 0%, rgba(88, 86, 214, 0.95) 100%)'
@@ -1139,47 +1334,195 @@ const Goals = ({ onLogout }) => {
                   boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.2)',
                   zIndex: 1000,
-                  padding: '10px',
+                  padding: '15px',
                   animation: 'slideDown 0.3s ease'
                 }}
               >
-                {/* 文件列表标题 */}
+                {/* 面包屑导航 */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  marginBottom: '10px',
-                  paddingBottom: '8px',
+                  marginBottom: '15px',
+                  paddingBottom: '10px',
                   borderBottom: '1px solid rgba(255,255,255,0.2)'
                 }}>
-                  <span style={{
-                    color: isDarkMode ? '#fff' : currentTheme.text,
-                    fontWeight: '600',
-                    fontSize: '14px'
-                  }}>📁 文件管理</span>
-                  <button
-                    onClick={async () => {
-                      const fileName = prompt('请输入文件名:');
-                      if (fileName && fileName.trim()) {
-                        await createFile(fileName.trim());
-                      }
-                    }}
-                    style={{
-                      background: 'rgba(255,255,255,0.2)',
-                      border: 'none',
-                      borderRadius: '12px',
-                      padding: '4px 8px',
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    flex: 1,
+                    overflow: 'hidden'
+                  }}>
+                    {/* 返回按钮 */}
+                    {currentPath.length > 0 && (
+                      <button
+                        onClick={goBack}
+                        style={{
+                          background: 'rgba(255,255,255,0.2)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          marginRight: '8px',
+                          color: isDarkMode ? '#fff' : currentTheme.text,
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ⬅️ 返回
+                      </button>
+                    )}
+                    
+                    {/* 路径导航 */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      fontSize: '13px',
                       color: isDarkMode ? '#fff' : currentTheme.text,
-                      fontSize: '12px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    + 新建
-                  </button>
+                      overflow: 'hidden'
+                    }}>
+                      <button
+                        onClick={() => navigateToPath(-1)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: isDarkMode ? '#fff' : currentTheme.text,
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: currentFolder === null ? '600' : '400'
+                        }}
+                      >
+                        📁 根目录
+                      </button>
+                      
+                      {currentPath.map((folder, index) => (
+                        <div key={folder.id} style={{ display: 'flex', alignItems: 'center' }}>
+                          <span style={{ margin: '0 4px', fontSize: '11px' }}>/</span>
+                          <button
+                            onClick={() => navigateToPath(index)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: isDarkMode ? '#fff' : currentTheme.text,
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: index === currentPath.length - 1 ? '600' : '400'
+                            }}
+                          >
+                            📁 {folder.name}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* 新建下拉按钮 */}
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setShowCreateMenu(!showCreateMenu)}
+                      style={{
+                        background: 'rgba(255,255,255,0.2)',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '4px 8px',
+                        color: isDarkMode ? '#fff' : currentTheme.text,
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                    >
+                      + 新建 {showCreateMenu ? '▲' : '▼'}
+                    </button>
+                    
+                    {/* 创建菜单 */}
+                    {showCreateMenu && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        right: 0,
+                        marginTop: '4px',
+                        background: isDarkMode ? 'rgba(30,30,30,0.95)' : 'rgba(255,255,255,0.95)',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: '8px',
+                        minWidth: '120px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                        zIndex: 1000
+                      }}>
+                        <button
+                          onClick={async () => {
+                            const fileName = prompt('请输入文件名:');
+                            if (fileName && fileName.trim()) {
+                              await createFile(fileName.trim(), 'file', currentFolder);
+                              setShowCreateMenu(false);
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '8px 12px',
+                            color: isDarkMode ? '#fff' : currentTheme.text,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            borderRadius: '8px 8px 0 0'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                          📄 新建文件
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const folderName = prompt('请输入文件夹名:');
+                            if (folderName && folderName.trim()) {
+                              await createFile(folderName.trim(), 'folder', currentFolder);
+                              setShowCreateMenu(false);
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '8px 12px',
+                            color: isDarkMode ? '#fff' : currentTheme.text,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            borderRadius: '0 0 8px 8px'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                          📁 新建文件夹
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
-                {/* 文件列表 */}
-                {allFiles.map((file) => (
+                {/* 当前文件夹内容 */}
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {getCurrentFolderContent().length > 0 ? (
+                    renderCurrentFolder()
+                  ) : (
+                    <div style={{
+                      padding: '30px 20px',
+                      textAlign: 'center',
+                      color: isDarkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)',
+                      fontSize: '14px'
+                    }}>
+                      📂 当前文件夹为空<br/>
+                      <span style={{ fontSize: '12px', marginTop: '5px', display: 'block' }}>
+                        点击上方的"新建"按钮创建文件或文件夹
+                      </span>
+                    </div>
+                  )}
+                </div>
+                
+                {/* 旧的文件列表备用 */}
+                {false && allFiles.map((file) => (
                   <div
                     key={file.id}
                     style={{

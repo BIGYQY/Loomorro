@@ -314,48 +314,81 @@ app.delete('/api/goals/:id', authenticateToken, async (req, res) => {
 
 // ==================== 文件管理接口 ====================
 
+// 递归构建文件树
+function buildFileTree(files, parentId = null) {
+  const tree = [];
+  for (const file of files) {
+    if (file.parent_id === parentId) {
+      const children = buildFileTree(files, file.id);
+      tree.push({
+        ...file,
+        children: children.length > 0 ? children : []
+      });
+    }
+  }
+  return tree;
+}
+
 // 获取用户所有文件
 app.get('/api/files', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM files WHERE user_id = $1 ORDER BY created_at ASC',
+      'SELECT * FROM files WHERE user_id = $1 ORDER BY type DESC, name ASC',
       [req.user.userId]
     );
 
     // 如果用户没有文件，创建默认文件
     if (result.rows.length === 0) {
       const defaultFile = await pool.query(
-        'INSERT INTO files (name, user_id) VALUES ($1, $2) RETURNING *',
-        ['我的理想规划', req.user.userId]
+        'INSERT INTO files (name, user_id, type) VALUES ($1, $2, $3) RETURNING *',
+        ['我的理想规划', req.user.userId, 'file']
       );
-      return res.json({ files: defaultFile.rows });
+      return res.json({ files: defaultFile.rows, tree: defaultFile.rows });
     }
 
-    res.json({ files: result.rows });
+    // 构建树形结构
+    const tree = buildFileTree(result.rows);
+    
+    res.json({ files: result.rows, tree });
   } catch (error) {
     console.error('获取文件列表失败:', error);
     res.status(500).json({ error: '获取文件列表失败' });
   }
 });
 
-// 创建新文件
+// 创建新文件或文件夹
 app.post('/api/files', authenticateToken, async (req, res) => {
   try {
-    const { name } = req.body;
+    const { name, type = 'file', parent_id = null } = req.body;
     
     if (!name || !name.trim()) {
-      return res.status(400).json({ error: '文件名不能为空' });
+      return res.status(400).json({ error: '名称不能为空' });
+    }
+    
+    if (!['file', 'folder'].includes(type)) {
+      return res.status(400).json({ error: '类型必须是file或folder' });
+    }
+
+    // 如果指定了父文件夹，检查父文件夹是否存在且属于当前用户
+    if (parent_id) {
+      const parentCheck = await pool.query(
+        'SELECT * FROM files WHERE id = $1 AND user_id = $2 AND type = $3',
+        [parent_id, req.user.userId, 'folder']
+      );
+      if (parentCheck.rows.length === 0) {
+        return res.status(400).json({ error: '指定的父文件夹不存在' });
+      }
     }
 
     const result = await pool.query(
-      'INSERT INTO files (name, user_id) VALUES ($1, $2) RETURNING *',
-      [name.trim(), req.user.userId]
+      'INSERT INTO files (name, user_id, type, parent_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name.trim(), req.user.userId, type, parent_id]
     );
 
     res.status(201).json({ file: result.rows[0] });
   } catch (error) {
-    console.error('创建文件失败:', error);
-    res.status(500).json({ error: '创建文件失败' });
+    console.error('创建失败:', error);
+    res.status(500).json({ error: '创建失败' });
   }
 });
 
@@ -385,24 +418,104 @@ app.put('/api/files/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// 删除文件
+// 移动文件/文件夹到指定文件夹
+app.patch('/api/files/:id/move', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { parent_id } = req.body;
+    
+    // 检查文件是否存在且属于当前用户
+    const fileCheck = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    
+    if (fileCheck.rows.length === 0) {
+      return res.status(404).json({ error: '文件不存在或无权限访问' });
+    }
+    
+    // 如果指定了父文件夹，检查父文件夹是否存在
+    if (parent_id !== null) {
+      const parentCheck = await pool.query(
+        'SELECT * FROM files WHERE id = $1 AND user_id = $2 AND type = $3',
+        [parent_id, req.user.userId, 'folder']
+      );
+      if (parentCheck.rows.length === 0) {
+        return res.status(400).json({ error: '指定的父文件夹不存在' });
+      }
+      
+      // 防止将文件夹移动到自己的子文件夹中（避免循环引用）
+      if (fileCheck.rows[0].type === 'folder') {
+        const checkCycle = await pool.query(
+          'WITH RECURSIVE folder_tree AS (SELECT id, parent_id FROM files WHERE id = $1 AND user_id = $2 UNION SELECT f.id, f.parent_id FROM files f INNER JOIN folder_tree ft ON f.parent_id = ft.id WHERE f.user_id = $2) SELECT id FROM folder_tree WHERE id = $3',
+          [parent_id, req.user.userId, id]
+        );
+        if (checkCycle.rows.length > 0) {
+          return res.status(400).json({ error: '不能将文件夹移动到其子文件夹中' });
+        }
+      }
+    }
+    
+    const result = await pool.query(
+      'UPDATE files SET parent_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING *',
+      [parent_id, id, req.user.userId]
+    );
+    
+    res.json({ file: result.rows[0] });
+  } catch (error) {
+    console.error('移动文件失败:', error);
+    res.status(500).json({ error: '移动文件失败' });
+  }
+});
+
+// 删除文件或文件夹（递归删除）
 app.delete('/api/files/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-
-    const result = await pool.query(
-      'DELETE FROM files WHERE id = $1 AND user_id = $2 RETURNING *',
+    
+    // 检查文件是否存在且属于当前用户
+    const fileCheck = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
       [id, req.user.userId]
     );
-
-    if (result.rows.length === 0) {
+    
+    if (fileCheck.rows.length === 0) {
       return res.status(404).json({ error: '文件不存在或无权限访问' });
     }
+    
+    const file = fileCheck.rows[0];
+    
+    // 如果是文件夹，先递归删除所有子项
+    if (file.type === 'folder') {
+      // 删除该文件夹下的所有目标
+      await pool.query(
+        'DELETE FROM goals WHERE file_id = $1 AND user_id = $2',
+        [id, req.user.userId]
+      );
+      
+      // 递归删除所有子文件和子文件夹（使用CASCADE删除）
+      await pool.query(
+        'WITH RECURSIVE folder_tree AS (SELECT id FROM files WHERE id = $1 AND user_id = $2 UNION SELECT f.id FROM files f INNER JOIN folder_tree ft ON f.parent_id = ft.id WHERE f.user_id = $2) DELETE FROM files WHERE id IN (SELECT id FROM folder_tree) AND user_id = $2',
+        [id, req.user.userId]
+      );
+    } else {
+      // 删除文件相关的目标
+      await pool.query(
+        'DELETE FROM goals WHERE file_id = $1 AND user_id = $2',
+        [id, req.user.userId]
+      );
+      
+      // 删除文件
+      await pool.query(
+        'DELETE FROM files WHERE id = $1 AND user_id = $2',
+        [id, req.user.userId]
+      );
+    }
 
-    res.json({ message: '文件删除成功', file: result.rows[0] });
+    res.json({ message: file.type === 'folder' ? '文件夹删除成功' : '文件删除成功', file });
   } catch (error) {
-    console.error('删除文件失败:', error);
-    res.status(500).json({ error: '删除文件失败' });
+    console.error('删除失败:', error);
+    res.status(500).json({ error: '删除失败' });
   }
 });
 
