@@ -135,9 +135,7 @@ const Goals = ({ onLogout }) => {
             if (item.type === 'folder') {
               // 单击选择文件夹（用于高亮显示）
             } else {
-              setCurrentFile(item);
-              fetchGoals(item.id);
-              setShowFileDropdown(false);
+              switchToFile(item);
             }
           }}
           onDoubleClick={() => {
@@ -288,6 +286,7 @@ const Goals = ({ onLogout }) => {
       
       if (type === 'file') {
         setCurrentFile(newItem);
+        setSelectedGoal(null);
         setMessage('文件创建成功！');
       } else {
         setMessage('文件夹创建成功！');
@@ -342,8 +341,7 @@ const Goals = ({ onLogout }) => {
       setAllFiles(remainingFiles);
       
       if (currentFile && currentFile.id === fileId && remainingFiles.length > 0) {
-        setCurrentFile(remainingFiles[0]);
-        fetchGoals(remainingFiles[0].id);
+        switchToFile(remainingFiles[0]);
       }
       setMessage('文件删除成功！');
     } catch (error) {
@@ -354,6 +352,7 @@ const Goals = ({ onLogout }) => {
   const switchToFile = async (file) => {
     setCurrentFile(file);
     setShowFileDropdown(false);
+    setSelectedGoal(null);
     await fetchGoals(file.id);
   };
 
