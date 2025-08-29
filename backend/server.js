@@ -519,6 +519,174 @@ app.delete('/api/files/:id', authenticateToken, async (req, res) => {
   }
 });
 
+//================ 节点连接管理API ================
+
+// 获取文件的所有连接
+app.get('/api/connections/:fileId', authenticateToken, async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    
+    // 验证文件权限
+    const fileCheck = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+      [fileId, req.user.userId]
+    );
+    
+    if (fileCheck.rows.length === 0) {
+      return res.status(404).json({ error: '文件不存在或无权限访问' });
+    }
+    
+    // 获取连接数据
+    const connections = await pool.query(
+      'SELECT * FROM goal_connections WHERE file_id = $1',
+      [fileId]
+    );
+    
+    res.json({ connections: connections.rows });
+  } catch (error) {
+    console.error('获取连接失败:', error);
+    res.status(500).json({ error: '获取连接失败' });
+  }
+});
+
+// 创建新连接
+app.post('/api/connections', authenticateToken, async (req, res) => {
+  try {
+    const { from_goal_id, to_goal_id, file_id } = req.body;
+    
+    // 验证文件权限
+    const fileCheck = await pool.query(
+      'SELECT * FROM files WHERE id = $1 AND user_id = $2',
+      [file_id, req.user.userId]
+    );
+    
+    if (fileCheck.rows.length === 0) {
+      return res.status(404).json({ error: '文件不存在或无权限访问' });
+    }
+    
+    // 验证节点是否属于该文件
+    const goalCheck = await pool.query(
+      'SELECT COUNT(*) as count FROM goals WHERE (id = $1 OR id = $2) AND file_id = $3 AND user_id = $4',
+      [from_goal_id, to_goal_id, file_id, req.user.userId]
+    );
+    
+    if (goalCheck.rows[0].count !== '2') {
+      return res.status(400).json({ error: '节点不存在或无权限' });
+    }
+    
+    // 检查是否已存在相同连接
+    const existingConnection = await pool.query(
+      'SELECT * FROM goal_connections WHERE from_goal_id = $1 AND to_goal_id = $2 AND file_id = $3',
+      [from_goal_id, to_goal_id, file_id]
+    );
+    
+    if (existingConnection.rows.length > 0) {
+      return res.status(400).json({ error: '连接已存在' });
+    }
+    
+    // 创建连接
+    const connection = await pool.query(
+      'INSERT INTO goal_connections (from_goal_id, to_goal_id, file_id) VALUES ($1, $2, $3) RETURNING *',
+      [from_goal_id, to_goal_id, file_id]
+    );
+    
+    res.json({ connection: connection.rows[0], message: '连接创建成功' });
+  } catch (error) {
+    console.error('创建连接失败:', error);
+    res.status(500).json({ error: '创建连接失败' });
+  }
+});
+
+// 删除连接
+app.delete('/api/connections/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 验证连接是否存在且有权限（通过文件所有权验证）
+    const connectionCheck = await pool.query(
+      `SELECT gc.*, f.user_id 
+       FROM goal_connections gc 
+       JOIN files f ON gc.file_id = f.id 
+       WHERE gc.id = $1 AND f.user_id = $2`,
+      [id, req.user.userId]
+    );
+    
+    if (connectionCheck.rows.length === 0) {
+      return res.status(404).json({ error: '连接不存在或无权限删除' });
+    }
+    
+    // 删除连接
+    await pool.query('DELETE FROM goal_connections WHERE id = $1', [id]);
+    
+    res.json({ message: '连接删除成功' });
+  } catch (error) {
+    console.error('删除连接失败:', error);
+    res.status(500).json({ error: '删除连接失败' });
+  }
+});
+
+//================ 节点位置管理API ================
+
+// 保存节点位置
+app.put('/api/goals/:id/position', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { x_position, y_position } = req.body;
+    
+    // 验证参数
+    if (typeof x_position !== 'number' || typeof y_position !== 'number') {
+      return res.status(400).json({ error: '坐标必须是数字' });
+    }
+    
+    // 验证目标是否存在且属于当前用户
+    const goalCheck = await pool.query(
+      'SELECT * FROM goals WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    
+    if (goalCheck.rows.length === 0) {
+      return res.status(404).json({ error: '目标不存在或无权限' });
+    }
+    
+    // 更新位置
+    await pool.query(
+      'UPDATE goals SET x_position = $1, y_position = $2 WHERE id = $3 AND user_id = $4',
+      [x_position, y_position, id, req.user.userId]
+    );
+    
+    res.json({ message: '位置更新成功', x_position, y_position });
+  } catch (error) {
+    console.error('保存节点位置失败:', error);
+    res.status(500).json({ error: '保存位置失败' });
+  }
+});
+
+// 批量更新节点位置
+app.put('/api/goals/positions', authenticateToken, async (req, res) => {
+  try {
+    const { positions } = req.body; // [{id, x_position, y_position}, ...]
+    
+    if (!Array.isArray(positions)) {
+      return res.status(400).json({ error: 'positions必须是数组' });
+    }
+    
+    // 批量更新
+    for (const pos of positions) {
+      if (typeof pos.x_position === 'number' && typeof pos.y_position === 'number') {
+        await pool.query(
+          'UPDATE goals SET x_position = $1, y_position = $2 WHERE id = $3 AND user_id = $4',
+          [pos.x_position, pos.y_position, pos.id, req.user.userId]
+        );
+      }
+    }
+    
+    res.json({ message: '批量位置更新成功' });
+  } catch (error) {
+    console.error('批量保存节点位置失败:', error);
+    res.status(500).json({ error: '批量保存位置失败' });
+  }
+});
+
 // 启动服务器
 app.listen(PORT, () => {
   console.log(`🚀 服务器运行在 http://localhost:${PORT}`);

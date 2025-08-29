@@ -52,13 +52,21 @@ const Goals = ({ onLogout }) => {
   const [currentPath, setCurrentPath] = useState([]); // 当前路径面包屑
   const [currentFolderContent, setCurrentFolderContent] = useState([]); // 当前文件夹内容
   
+  // 节点连接状态
+  const [connections, setConnections] = useState([]); // 当前文件的所有连接
+  const [dragConnection, setDragConnection] = useState(null); // 拖拽中的连接 {from: {nodeId, x, y}, currentPos: {x, y}}
+  const [hoveredConnectionPoint, setHoveredConnectionPoint] = useState(null); // 悬停的连接点 {nodeId, side}
+  
+  // 节点拖拽状态
+  const [dragNode, setDragNode] = useState(null); // 拖拽中的节点 {nodeId, startPos: {x, y}, offset: {x, y}}
+  
   // 用户信息状态
   const [userInfo, setUserInfo] = useState(null);
   const [fileCount, setFileCount] = useState(0);
   
   // 画布相关状态
   const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({ x: -2200, y: -1200 }); // 让画布中心的节点显示在屏幕中心附近
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
@@ -354,6 +362,7 @@ const Goals = ({ onLogout }) => {
     setShowFileDropdown(false);
     setSelectedGoal(null);
     await fetchGoals(file.id);
+    await fetchConnections(file.id);
   };
 
   // 获取用户信息
@@ -429,49 +438,35 @@ const Goals = ({ onLogout }) => {
   };
 
   // 构建树状结构数据并计算位置
-  const buildTreeData = (goals) => {
-    const goalMap = {};
+  const buildNodeData = (goals) => {
+    const nodes = [];
+    let nextX = 2300, nextY = 1400; // 默认位置计数器（从画布中心附近开始）
+    
     goals.forEach(goal => {
-      goalMap[goal.id] = { 
+      const node = { 
         ...goal, 
-        children: [],
         width: calculateNodeWidth(goal.title) // 添加动态宽度
       };
-    });
-
-    const rootGoals = [];
-    goals.forEach(goal => {
-      if (goal.parent_id && goalMap[goal.parent_id]) {
-        goalMap[goal.parent_id].children.push(goalMap[goal.id]);
-      } else if (!goal.parent_id) {
-        rootGoals.push(goalMap[goal.id]);
-      }
-    });
-
-    // 计算节点位置
-    const calculatePositions = (nodes, level = 0, startY = 100) => {
-      let currentY = startY;
-      const nodeHeight = 60; // 40px节点 + 20px间距
-      const nodeSpacing = 20;
-      const levelSpacing = 200;
-
-      nodes.forEach(node => {
-        node.x = 50 + level * levelSpacing;
-        node.y = currentY;
-        
-        if (node.children && node.children.length > 0) {
-          const childrenHeight = calculatePositions(node.children, level + 1, currentY);
-          currentY = childrenHeight;
-        } else {
-          currentY += nodeHeight + nodeSpacing;
+      
+      // 使用存储的坐标，如果没有坐标就分配默认位置
+      if (goal.x_position !== null && goal.y_position !== null) {
+        node.x = goal.x_position;
+        node.y = goal.y_position;
+      } else {
+        // 为没有坐标的节点分配默认位置
+        node.x = nextX;
+        node.y = nextY;
+        nextX += 180; // 水平间距
+        if (nextX > 3200) { // 换行
+          nextX = 2300;
+          nextY += 80;
         }
-      });
-
-      return currentY;
-    };
-
-    calculatePositions(rootGoals);
-    return rootGoals;
+      }
+      
+      nodes.push(node);
+    });
+    
+    return nodes;
   };
 
   // 获取目标列表
@@ -492,11 +487,151 @@ const Goals = ({ onLogout }) => {
       });
       const goals = response.data.goals;
       setAllGoals(goals);
-      setTreeData(buildTreeData(goals));
+      setTreeData(buildNodeData(goals));
     } catch (error) {
       console.error('获取目标错误:', error);
       setMessage('获取目标失败');
     }
+  };
+
+  // 获取连接数据
+  const fetchConnections = async (fileId = null) => {
+    try {
+      const token = getToken();
+      const targetFileId = fileId || (currentFile && currentFile.id);
+      
+      if (!targetFileId) {
+        setConnections([]);
+        return;
+      }
+      
+      const response = await axios.get(`http://localhost:3001/api/connections/${targetFileId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setConnections(response.data.connections || []);
+    } catch (error) {
+      console.error('获取连接错误:', error);
+      // 不显示错误消息，因为连接是可选功能
+    }
+  };
+
+  // 创建连接
+  const createConnection = async (fromGoalId, toGoalId) => {
+    try {
+      const token = getToken();
+      
+      if (!currentFile || !currentFile.id) {
+        setMessage('请先选择一个文件');
+        return false;
+      }
+
+      await axios.post('http://localhost:3001/api/connections', {
+        from_goal_id: fromGoalId,
+        to_goal_id: toGoalId,
+        file_id: currentFile.id
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // 重新获取连接数据
+      await fetchConnections(currentFile.id);
+      setMessage('连接创建成功！');
+      return true;
+    } catch (error) {
+      console.error('创建连接失败:', error);
+      setMessage(error.response?.data?.error || '创建连接失败');
+      return false;
+    }
+  };
+
+  // 删除连接
+  const deleteConnection = async (connectionId) => {
+    try {
+      const token = getToken();
+      
+      await axios.delete(`http://localhost:3001/api/connections/${connectionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // 重新获取连接数据
+      await fetchConnections(currentFile.id);
+      setMessage('连接删除成功！');
+    } catch (error) {
+      console.error('删除连接失败:', error);
+      setMessage(error.response?.data?.error || '删除连接失败');
+    }
+  };
+
+  // 保存节点位置
+  const saveNodePosition = async (nodeId, x, y) => {
+    try {
+      const token = getToken();
+      
+      await axios.put(`http://localhost:3001/api/goals/${nodeId}/position`, {
+        x_position: x,
+        y_position: y
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // 更新本地数据
+      setAllGoals(prevGoals => 
+        prevGoals.map(goal => 
+          goal.id === nodeId 
+            ? { ...goal, x_position: x, y_position: y }
+            : goal
+        )
+      );
+      setTreeData(prevData => 
+        prevData.map(node => 
+          node.id === nodeId 
+            ? { ...node, x, y }
+            : node
+        )
+      );
+    } catch (error) {
+      console.error('保存节点位置失败:', error);
+      // 不显示错误消息，因为拖拽时频繁调用
+    }
+  };
+
+  // 检查位置是否有重叠，如果有则自动调整
+  const findNonOverlappingPosition = (targetX, targetY, existingNodes, nodeWidth = 120) => {
+    const nodeHeight = 40;
+    const padding = 20;
+    
+    let finalX = targetX;
+    let finalY = targetY;
+    
+    // 检查是否与现有节点重叠
+    const checkOverlap = (x, y) => {
+      return existingNodes.some(node => {
+        if (!node.x_position && !node.y_position && !node.x && !node.y) return false;
+        const nodeX = node.x_position || node.x || 0;
+        const nodeY = node.y_position || node.y || 0;
+        const nodeW = node.width || 120;
+        
+        return (
+          x < nodeX + nodeW + padding &&
+          x + nodeWidth + padding > nodeX &&
+          y < nodeY + nodeHeight + padding &&
+          y + nodeHeight + padding > nodeY
+        );
+      });
+    };
+    
+    // 如果重叠，向右下方偏移直到找到空位
+    let attempts = 0;
+    while (checkOverlap(finalX, finalY) && attempts < 20) {
+      finalX += 180; // 向右偏移
+      if (finalX > 1000) { // 如果太右，换行
+        finalX = targetX;
+        finalY += 80; // 向下偏移
+      }
+      attempts++;
+    }
+    
+    return { x: finalX, y: finalY };
   };
 
   // 创建新目标
@@ -514,11 +649,37 @@ const Goals = ({ onLogout }) => {
     setLoading(true);
     try {
       const token = getToken();
-      await axios.post('http://localhost:3001/api/goals', {
+      
+      // 计算新节点位置（画布中心附近）
+      let newNodeX = 2500, newNodeY = 1500;
+      
+      if (selectedGoal) {
+        // 如果有选中节点，在其右侧创建新节点
+        const selectedNode = allGoals.find(g => g.id === selectedGoal.id);
+        if (selectedNode) {
+          const baseX = (selectedNode.x_position || selectedNode.x || 2500) + (selectedNode.width || 120) + 200;
+          const baseY = selectedNode.y_position || selectedNode.y || 1500;
+          
+          // 检查重叠并调整位置
+          const position = findNonOverlappingPosition(baseX, baseY, allGoals);
+          newNodeX = position.x;
+          newNodeY = position.y;
+        }
+      } else {
+        // 没有选中节点，在中心附近找个空位
+        const position = findNonOverlappingPosition(2500, 1500, allGoals);
+        newNodeX = position.x;
+        newNodeY = position.y;
+      }
+
+      // 创建新节点
+      const response = await axios.post('http://localhost:3001/api/goals', {
         title: newGoalTitle,
         description: newGoalDescription,
-        parent_id: selectedGoal?.id || null,
-        file_id: currentFile.id
+        parent_id: null, // 不再使用父子关系
+        file_id: currentFile.id,
+        x_position: newNodeX,
+        y_position: newNodeY
       }, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -526,12 +687,28 @@ const Goals = ({ onLogout }) => {
         }
       });
 
-      setMessage(selectedGoal ? '子目标创建成功！' : '目标创建成功！');
+      const newGoal = response.data.goal;
+
+      // 如果有选中节点，创建连接
+      if (selectedGoal) {
+        try {
+          await createConnection(selectedGoal.id, newGoal.id);
+        } catch (error) {
+          console.error('创建连接失败:', error);
+          // 连接失败不影响节点创建成功
+        }
+      }
+
+      setMessage(selectedGoal ? '节点创建并连接成功！' : '节点创建成功！');
       setNewGoalTitle('');
       setNewGoalDescription('');
       setShowAddDialog(false);
-      fetchGoals();
+      
+      // 重新获取数据
+      await fetchGoals();
+      await fetchConnections();
     } catch (error) {
+      console.error('创建失败:', error);
       setMessage('创建失败');
     } finally {
       setLoading(false);
@@ -618,34 +795,34 @@ const Goals = ({ onLogout }) => {
     setIsDragging(false);
   };
 
-  // 滚轮缩放（支持10倍放大）
+  // 简单的滚轮缩放
   const handleWheel = (e) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(prev => Math.max(0.2, Math.min(10, prev + delta)));
+    const delta = e.deltaY > 0 ? 0.9 : 1.1; // 缩放因子
+    
+    // 获取鼠标位置
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const newScale = Math.max(0.2, Math.min(10, scale * delta));
+    const factor = newScale / scale;
+    
+    // 简单的以鼠标为中心缩放
+    setPosition(prev => ({
+      x: mouseX - (mouseX - prev.x) * factor,
+      y: mouseY - (mouseY - prev.y) * factor
+    }));
+    
+    setScale(newScale);
   };
 
   // 计算画布尺寸（根据节点位置）
   const calculateCanvasSize = (nodes) => {
-    if (!nodes || nodes.length === 0) return { width: 800, height: 600 };
-    
-    let maxX = 0, maxY = 0;
-    
-    const getNodeBounds = (nodeList) => {
-      nodeList.forEach(node => {
-        maxX = Math.max(maxX, node.x + 120); // 节点宽度120
-        maxY = Math.max(maxY, node.y + 60);  // 节点高度60
-        if (node.children) {
-          getNodeBounds(node.children);
-        }
-      });
-    };
-    
-    getNodeBounds(nodes);
-    
+    // 给一个超大的画布，让用户可以自由拖拽到任何地方
     return {
-      width: Math.max(800, maxX + 200), // 至少800宽度，右边留200px边距
-      height: Math.max(600, maxY + 200) // 至少600高度，底部留200px边距
+      width: 5000,  // 超大宽度
+      height: 3000  // 超大高度
     };
   };
 
@@ -653,39 +830,67 @@ const Goals = ({ onLogout }) => {
   const renderAllNodes = (nodes) => {
     const elements = [];
 
-    const processNode = (node) => {
-      // 渲染连线到子节点（贝塞尔曲线）
-      if (node.children) {
-        node.children.forEach(child => {
-          const startX = node.x + node.width;
-          const startY = node.y + 20;
-          const endX = child.x;
-          const endY = child.y + 20;
-          
-          // 计算贝塞尔曲线控制点
-          const controlPoint1X = startX + (endX - startX) * 0.5;
-          const controlPoint1Y = startY;
-          const controlPoint2X = startX + (endX - startX) * 0.5;
-          const controlPoint2Y = endY;
-          
-          const pathData = `M ${startX} ${startY} C ${controlPoint1X} ${controlPoint1Y}, ${controlPoint2X} ${controlPoint2Y}, ${endX} ${endY}`;
-          
-          elements.push(
+    // 首先渲染所有连接线（基于数据库中的连接关系）
+    connections.forEach(connection => {
+      const fromNode = nodes.find(n => n.id === connection.from_goal_id);
+      const toNode = nodes.find(n => n.id === connection.to_goal_id);
+      
+      if (fromNode && toNode) {
+        // 计算连接线的起点和终点
+        const fromX = fromNode.x + (fromNode.width || 120);
+        const fromY = fromNode.y + 20;
+        const toX = toNode.x;
+        const toY = toNode.y + 20;
+        
+        // 贝塞尔曲线的控制点
+        const controlOffset = Math.abs(toX - fromX) * 0.3;
+        const cp1X = fromX + controlOffset;
+        const cp1Y = fromY;
+        const cp2X = toX - controlOffset;
+        const cp2Y = toY;
+        
+        elements.push(
+          <g key={`connection-${connection.id}`}>
+            {/* 连接线 */}
             <path
-              key={`line-${node.id}-${child.id}`}
-              d={pathData}
-              stroke={currentTheme.border}
+              d={`M ${fromX} ${fromY} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${toX} ${toY}`}
+              stroke={isDarkMode ? '#4ECDC4' : '#FF6B6B'}
               strokeWidth="2"
               fill="none"
-              opacity="0.6"
-              style={{ pointerEvents: 'none' }}
+              style={{ 
+                cursor: 'pointer',
+                opacity: 0.8,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.strokeWidth = '3';
+                e.target.style.opacity = '1';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.strokeWidth = '2';
+                e.target.style.opacity = '0.8';
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm('确定删除此连接吗？')) {
+                  deleteConnection(connection.id);
+                }
+              }}
             />
-          );
-          processNode(child);
-        });
+            
+            {/* 连接线箭头 */}
+            <polygon
+              points={`${toX-6},${toY-3} ${toX},${toY} ${toX-6},${toY+3}`}
+              fill={isDarkMode ? '#4ECDC4' : '#FF6B6B'}
+              style={{ pointerEvents: 'none', opacity: 0.8 }}
+            />
+          </g>
+        );
       }
+    });
 
-      // 渲染节点
+    // 渲染每个节点
+    nodes.forEach(node => {
       elements.push(
         <g key={`node-${node.id}`}>
           {/* 节点阴影 */}
@@ -721,10 +926,25 @@ const Goals = ({ onLogout }) => {
             onMouseLeave={(e) => {
               e.target.classList.remove('node-hover', 'node-hover-dark');
             }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const rect = e.currentTarget.closest('svg').getBoundingClientRect();
+              const startX = (e.clientX - rect.left) / scale;
+              const startY = (e.clientY - rect.top) / scale;
+              
+              setDragNode({
+                nodeId: node.id,
+                startPos: { x: startX, y: startY },
+                offset: { x: startX - node.x, y: startY - node.y }
+              });
+            }}
             onClick={(e) => {
-              e.target.classList.add('clicked');
-              setTimeout(() => e.target.classList.remove('clicked'), 400);
-              setSelectedGoal(selectedGoal?.id === node.id ? null : node);
+              // 只有在没有拖拽的情况下才处理点击
+              if (!dragNode) {
+                e.target.classList.add('clicked');
+                setTimeout(() => e.target.classList.remove('clicked'), 400);
+                setSelectedGoal(selectedGoal?.id === node.id ? null : node);
+              }
             }}
           />
           {/* 节点标题（只显示标题） */}
@@ -769,34 +989,201 @@ const Goals = ({ onLogout }) => {
             </g>
           )}
           
-          {/* 子节点数量 */}
-          {node.children && node.children.length > 0 && (
-            <text
-              x={node.x + 60}
-              y={node.y + 55}
-              textAnchor="middle"
-              fontSize="9"
-              fill={currentTheme.textSecondary}
-              style={{ pointerEvents: 'none' }}
-            >
-              {node.children.length} 个子目标
-            </text>
-          )}
+          
+          {/* 左侧输入连接点 */}
+          <g>
+            {/* 小的视觉圆球 */}
+            <circle
+              cx={node.x}
+              cy={node.y + 20}
+              r="3"
+              fill={isDarkMode ? '#7877C6' : '#FFB768'}
+              stroke={isDarkMode ? '#9D9BDB' : '#FF9F43'}
+              strokeWidth="1.5"
+              style={{ 
+                opacity: hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.side === 'left' ? 1 : 0.8,
+                transform: hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.side === 'left' ? 'scale(1.3)' : 'scale(1)',
+                transformOrigin: `${node.x}px ${node.y + 20}px`,
+                transition: 'all 0.2s ease',
+                pointerEvents: 'none'
+              }}
+            />
+            {/* 大的透明拖拽区域 */}
+            <circle
+              cx={node.x}
+              cy={node.y + 20}
+              r="10"
+              fill="transparent"
+              style={{ 
+                cursor: 'crosshair'
+              }}
+              onMouseEnter={() => {
+                setHoveredConnectionPoint({ nodeId: node.id, side: 'left' });
+              }}
+              onMouseLeave={() => {
+                setHoveredConnectionPoint(null);
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.closest('svg').getBoundingClientRect();
+                const x = (e.clientX - rect.left) / scale;
+                const y = (e.clientY - rect.top) / scale;
+                setDragConnection({
+                  from: {
+                    nodeId: node.id,
+                    side: 'left',
+                    x: node.x,
+                    y: node.y + 20
+                  },
+                  currentPos: { x, y }
+                });
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
+                if (dragConnection && dragConnection.from.nodeId !== node.id) {
+                  const fromSide = dragConnection.from.side;
+                  if (fromSide === 'right') {
+                    createConnection(dragConnection.from.nodeId, node.id);
+                  } else if (fromSide === 'left') {
+                    createConnection(node.id, dragConnection.from.nodeId);
+                  }
+                }
+                setDragConnection(null);
+              }}
+            />
+          </g>
+          
+          {/* 右侧输出连接点 */}
+          <g>
+            {/* 小的视觉圆球 */}
+            <circle
+              cx={node.x + node.width}
+              cy={node.y + 20}
+              r="3"
+              fill={isDarkMode ? '#7877C6' : '#FFB768'}
+              stroke={isDarkMode ? '#9D9BDB' : '#FF9F43'}
+              strokeWidth="1.5"
+              style={{ 
+                opacity: hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.side === 'right' ? 1 : 0.8,
+                transform: hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.side === 'right' ? 'scale(1.3)' : 'scale(1)',
+                transformOrigin: `${node.x + node.width}px ${node.y + 20}px`,
+                transition: 'all 0.2s ease',
+                pointerEvents: 'none'
+              }}
+            />
+            {/* 大的透明拖拽区域 */}
+            <circle
+              cx={node.x + node.width}
+              cy={node.y + 20}
+              r="10"
+              fill="transparent"
+              style={{ 
+                cursor: 'crosshair'
+              }}
+              onMouseEnter={() => {
+                setHoveredConnectionPoint({ nodeId: node.id, side: 'right' });
+              }}
+              onMouseLeave={() => {
+                setHoveredConnectionPoint(null);
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.closest('svg').getBoundingClientRect();
+                const x = (e.clientX - rect.left) / scale;
+                const y = (e.clientY - rect.top) / scale;
+                setDragConnection({
+                  from: {
+                    nodeId: node.id,
+                    side: 'right',
+                    x: node.x + node.width,
+                    y: node.y + 20
+                  },
+                  currentPos: { x, y }
+                });
+              }}
+              onMouseUp={(e) => {
+                e.stopPropagation();
+                if (dragConnection && dragConnection.from.nodeId !== node.id) {
+                  const fromSide = dragConnection.from.side;
+                  if (fromSide === 'left') {
+                    createConnection(node.id, dragConnection.from.nodeId);
+                  } else if (fromSide === 'right') {
+                    createConnection(dragConnection.from.nodeId, node.id);
+                  }
+                }
+                setDragConnection(null);
+              }}
+            />
+          </g>
         </g>
       );
-    };
-
-    nodes.forEach(processNode);
+    });
+    
+    // 渲染拖拽中的临时连线
+    if (dragConnection) {
+      const { from, currentPos } = dragConnection;
+      
+      // 计算贝塞尔曲线的控制点
+      const controlOffset = Math.abs(currentPos.x - from.x) * 0.3;
+      const cp1X = from.x + (from.side === 'right' ? controlOffset : -controlOffset);
+      const cp1Y = from.y;
+      const cp2X = currentPos.x + (from.side === 'right' ? -controlOffset : controlOffset);
+      const cp2Y = currentPos.y;
+      
+      elements.push(
+        <g key="temp-connection">
+          {/* 临时连接线 */}
+          <path
+            d={`M ${from.x} ${from.y} C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${currentPos.x} ${currentPos.y}`}
+            stroke={isDarkMode ? '#4ECDC4' : '#FF6B6B'}
+            strokeWidth="2"
+            fill="none"
+            strokeDasharray="5,5"
+            style={{ opacity: 0.6, pointerEvents: 'none' }}
+          />
+          
+          {/* 临时连接终点圆圈 */}
+          <circle
+            cx={currentPos.x}
+            cy={currentPos.y}
+            r="4"
+            fill={isDarkMode ? '#4ECDC4' : '#FF6B6B'}
+            style={{ opacity: 0.8, pointerEvents: 'none' }}
+          />
+        </g>
+      );
+    }
+    
     return elements;
   };
 
   // 初始化数据
   useEffect(() => {
     const initializeData = async () => {
-      await fetchUserInfo(); // 获取用户信息
-      const firstFile = await fetchFiles();
-      if (firstFile) {
-        await fetchGoals(firstFile.id);
+      // 首先检查token是否存在
+      const token = getToken();
+      if (!token) {
+        setMessage('未登录，请先登录！');
+        // 这里可以添加重定向到登录页面的逻辑
+        // window.location.href = '/login';
+        return;
+      }
+      
+      try {
+        await fetchUserInfo(); // 获取用户信息
+        const firstFile = await fetchFiles();
+        if (firstFile) {
+          await fetchGoals(firstFile.id);
+        }
+      } catch (error) {
+        console.error('初始化失败:', error);
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          setMessage('登录已过期，请重新登录！');
+          // 清除无效token
+          localStorage.removeItem('token');
+          // 这里可以添加重定向到登录页面的逻辑
+          // window.location.href = '/login';
+        }
       }
     };
     initializeData();
@@ -1624,12 +2011,7 @@ const Goals = ({ onLogout }) => {
             : `radial-gradient(circle at 30% 40%, rgba(255, 183, 104, 0.1), transparent 70%), ${currentTheme.background}`,
           cursor: isDragging ? 'grabbing' : 'grab',
           overflow: 'hidden',
-          position: 'relative',
-          borderRadius: '15px',
-          margin: '10px',
-          marginBottom: '70px', // 为底部导航留出空间
-          boxSizing: 'border-box',
-          boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.05)'
+          position: 'relative'
         }}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
@@ -1649,12 +2031,61 @@ const Goals = ({ onLogout }) => {
           </div>
         ) : (
           <svg
-            width={calculateCanvasSize(treeData).width}
-            height={calculateCanvasSize(treeData).height}
+            width="5000"
+            height="3000"
             style={{
               transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
               transformOrigin: '0 0',
-              display: 'block'
+              display: 'block',
+              position: 'absolute',
+              top: 0,
+              left: 0
+            }}
+            onMouseMove={(e) => {
+              // 只在真正需要时才进行坐标计算，避免与缩放冲突
+              if (!dragConnection && !dragNode) return;
+              
+              const rect = e.currentTarget.getBoundingClientRect();
+              const currentX = (e.clientX - rect.left) / scale;
+              const currentY = (e.clientY - rect.top) / scale;
+              
+              // 处理连接线拖拽
+              if (dragConnection) {
+                setDragConnection({
+                  ...dragConnection,
+                  currentPos: { x: currentX, y: currentY }
+                });
+              }
+              
+              // 处理节点拖拽
+              if (dragNode) {
+                const newX = currentX - dragNode.offset.x;
+                const newY = currentY - dragNode.offset.y;
+                
+                // 更新节点位置（实时更新视觉）
+                setTreeData(prevData => 
+                  prevData.map(node => 
+                    node.id === dragNode.nodeId 
+                      ? { ...node, x: newX, y: newY }
+                      : node
+                  )
+                );
+              }
+            }}
+            onMouseUp={(e) => {
+              if (dragConnection) {
+                setDragConnection(null);
+              }
+              
+              if (dragNode) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const finalX = (e.clientX - rect.left) / scale - dragNode.offset.x;
+                const finalY = (e.clientY - rect.top) / scale - dragNode.offset.y;
+                
+                // 保存最终位置到数据库
+                saveNodePosition(dragNode.nodeId, finalX, finalY);
+                setDragNode(null);
+              }
             }}
           >
             {renderAllNodes(treeData)}

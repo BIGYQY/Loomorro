@@ -13,9 +13,34 @@ function App() {
     const token = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');
     
-    if (token && savedUser) {
-      setIsLoggedIn(true);
-      setUser(JSON.parse(savedUser));
+    // 验证token是否有效
+    if (token) {
+      try {
+        // 检查token是否过期
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const currentTime = Date.now() / 1000;
+        
+        if (payload.exp && payload.exp < currentTime) {
+          // Token过期，清除数据
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setIsLoggedIn(false);
+          return;
+        }
+        
+        if (savedUser) {
+          setIsLoggedIn(true);
+          setUser(JSON.parse(savedUser));
+        }
+      } catch (error) {
+        // Token解析失败，清除数据
+        console.error('Token解析失败:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setIsLoggedIn(false);
+      }
+    } else {
+      setIsLoggedIn(false);
     }
   }, []);
 
