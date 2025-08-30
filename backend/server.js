@@ -150,7 +150,7 @@ app.post('/api/register', async (req, res) => {
 // 创建新目标接口（需要登录）
   app.post('/api/goals', authenticateToken, async (req, res) => {
     try {
-      const { title, description, parent_id, status, priority, file_id } = req.body;
+      const { title, description, parent_id, status, priority, file_id, x_position, y_position } = req.body;
       const user_id = req.user.userId; // 从JWT token中获取用户ID
 
       // 验证必填字段
@@ -161,10 +161,10 @@ app.post('/api/register', async (req, res) => {
       // 插入新目标
       const newGoal = await pool.query(
         `INSERT INTO goals
-         (user_id, parent_id, title, description, status, priority, created_at, updated_at, order_index, file_id)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), 0, $7)
+         (user_id, parent_id, title, description, status, priority, created_at, updated_at, order_index, file_id, x_position, y_position)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), 0, $7, $8, $9)
          RETURNING *`,
-        [user_id, parent_id || null, title, description || '', status || 'active', priority || 1, file_id || null]
+        [user_id, parent_id || null, title, description || '', status || 'active', priority || 1, file_id || null, x_position || null, y_position || null]
       );
 
       res.status(201).json({

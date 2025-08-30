@@ -650,26 +650,17 @@ const Goals = ({ onLogout }) => {
     try {
       const token = getToken();
       
-      // 计算新节点位置（画布中心附近）
+      // 计算新节点位置
       let newNodeX = 2500, newNodeY = 1500;
       
+      // 如果有选中节点，就放在它的右边
       if (selectedGoal) {
-        // 如果有选中节点，在其右侧创建新节点
-        const selectedNode = allGoals.find(g => g.id === selectedGoal.id);
-        if (selectedNode) {
-          const baseX = (selectedNode.x_position || selectedNode.x || 2500) + (selectedNode.width || 120) + 200;
-          const baseY = selectedNode.y_position || selectedNode.y || 1500;
-          
-          // 检查重叠并调整位置
-          const position = findNonOverlappingPosition(baseX, baseY, allGoals);
-          newNodeX = position.x;
-          newNodeY = position.y;
+        // 从treeData中获取最新的节点位置信息
+        const currentNode = treeData.find(node => node.id === selectedGoal.id);
+        if (currentNode) {
+          newNodeX = currentNode.x + currentNode.width + 150;
+          newNodeY = currentNode.y;
         }
-      } else {
-        // 没有选中节点，在中心附近找个空位
-        const position = findNonOverlappingPosition(2500, 1500, allGoals);
-        newNodeX = position.x;
-        newNodeY = position.y;
       }
 
       // 创建新节点
@@ -706,7 +697,7 @@ const Goals = ({ onLogout }) => {
       
       // 重新获取数据
       await fetchGoals();
-      await fetchConnections();
+      await fetchConnections(currentFile.id);
     } catch (error) {
       console.error('创建失败:', error);
       setMessage('创建失败');
