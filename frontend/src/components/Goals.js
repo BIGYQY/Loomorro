@@ -883,6 +883,121 @@ const Goals = ({ onLogout }) => {
     return null;
   };
 
+  // 分析节点层级关系
+  const analyzeNodeLevels = () => {
+    const nodeLevels = new Map(); // nodeId -> level
+    const visitedNodes = new Set();
+    
+    // 找到所有根节点（没有入边的节点）
+    const rootNodes = treeData.filter(node => {
+      return !connections.some(conn => conn.to_goal_id === node.id);
+    });
+    
+    // 深度优先搜索设置层级
+    const setNodeLevel = (nodeId, level) => {
+      if (visitedNodes.has(nodeId)) {
+        // 如果节点已访问，取更大的层级
+        nodeLevels.set(nodeId, Math.max(nodeLevels.get(nodeId) || 0, level));
+        return;
+      }
+      
+      visitedNodes.add(nodeId);
+      nodeLevels.set(nodeId, level);
+      
+      // 找到所有子节点
+      const childConnections = connections.filter(conn => conn.from_goal_id === nodeId);
+      childConnections.forEach(conn => {
+        setNodeLevel(conn.to_goal_id, level + 1);
+      });
+    };
+    
+    // 从所有根节点开始设置层级
+    rootNodes.forEach(root => {
+      setNodeLevel(root.id, 0);
+    });
+    
+    // 处理可能的孤立节点
+    treeData.forEach(node => {
+      if (!nodeLevels.has(node.id)) {
+        nodeLevels.set(node.id, 0);
+      }
+    });
+    
+    return nodeLevels;
+  };
+
+  // 一键格式化排列节点
+  const formatNodes = async () => {
+    if (treeData.length === 0) {
+      setMessage('没有节点需要排列');
+      return;
+    }
+    
+    // 分析层级关系
+    const nodeLevels = analyzeNodeLevels();
+    
+    // 按层级分组节点
+    const levelGroups = new Map();
+    nodeLevels.forEach((level, nodeId) => {
+      if (!levelGroups.has(level)) {
+        levelGroups.set(level, []);
+      }
+      levelGroups.get(level).push(nodeId);
+    });
+    
+    // 计算布局参数
+    const LEVEL_SPACING = 300; // 层级间水平间距
+    const NODE_SPACING = 80;   // 同层节点间垂直间距
+    const START_X = 100;       // 起始X坐标
+    const START_Y = 100;       // 起始Y坐标
+    
+    // 计算每层的起始Y坐标（居中对齐）
+    const maxLevel = Math.max(...nodeLevels.values());
+    const updates = [];
+    
+    for (let level = 0; level <= maxLevel; level++) {
+      const nodesInLevel = levelGroups.get(level) || [];
+      const levelHeight = (nodesInLevel.length - 1) * NODE_SPACING;
+      const levelStartY = START_Y - levelHeight / 2;
+      
+      nodesInLevel.forEach((nodeId, index) => {
+        const node = treeData.find(n => n.id === nodeId);
+        if (node) {
+          const newX = START_X + level * LEVEL_SPACING;
+          const newY = levelStartY + index * NODE_SPACING;
+          
+          updates.push({
+            nodeId: nodeId,
+            newX: newX,
+            newY: newY,
+            currentX: node.x,
+            currentY: node.y
+          });
+        }
+      });
+    }
+    
+    // 添加动画并批量更新位置
+    try {
+      setMessage('正在整理节点布局...');
+      
+      // 并行发送所有位置更新请求
+      const updatePromises = updates.map(update => 
+        saveNodePosition(update.nodeId, update.newX, update.newY)
+      );
+      
+      await Promise.all(updatePromises);
+      
+      // 重新获取节点数据
+      await fetchGoals(currentFile.id);
+      setMessage(`成功排列了 ${updates.length} 个节点！`);
+      
+    } catch (error) {
+      console.error('格式化节点失败:', error);
+      setMessage('格式化节点时出现错误');
+    }
+  };
+
   // 简单的滚轮缩放
   const handleWheel = (e) => {
     e.preventDefault();
@@ -1794,6 +1909,28 @@ const Goals = ({ onLogout }) => {
             onAnimationEnd={(e) => e.target.style.animation = ''}
           >
             +
+          </button>
+          
+          <button
+            onClick={formatNodes}
+            className="btn-fancy lightning-btn"
+            style={{
+              width: '48px',
+              height: '48px',
+              background: 'linear-gradient(135deg, #2196F3, #1976D2)',
+              color: 'white',
+              fontSize: '20px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              overflow: 'visible'
+            }}
+            title="一键格式化排列"
+          >
+            ⚡
           </button>
           
           <button
