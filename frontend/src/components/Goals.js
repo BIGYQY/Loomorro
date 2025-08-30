@@ -786,6 +786,28 @@ const Goals = ({ onLogout }) => {
     setIsDragging(false);
   };
 
+  // 获取节点的输入连接（连接到这个节点左侧的连接）
+  // 注意：左侧端口只能有一个连接
+  const getInputConnection = (nodeId) => {
+    return connections.find(conn => conn.to_goal_id === nodeId);
+  };
+
+  // 根据连接ID获取输出端口的坐标
+  const getOutputPortPosition = (connectionId) => {
+    const connection = connections.find(conn => conn.id === connectionId);
+    if (!connection) return null;
+    
+    const fromNode = treeData.find(node => node.id === connection.from_goal_id);
+    if (!fromNode) return null;
+    
+    return {
+      nodeId: fromNode.id,
+      side: 'right',
+      x: fromNode.x + fromNode.width,
+      y: fromNode.y + 20
+    };
+  };
+
   // 简单的滚轮缩放
   const handleWheel = (e) => {
     e.preventDefault();
@@ -1019,24 +1041,70 @@ const Goals = ({ onLogout }) => {
                 const rect = e.currentTarget.closest('svg').getBoundingClientRect();
                 const x = (e.clientX - rect.left) / scale;
                 const y = (e.clientY - rect.top) / scale;
-                setDragConnection({
-                  from: {
-                    nodeId: node.id,
-                    side: 'left',
-                    x: node.x,
-                    y: node.y + 20
-                  },
-                  currentPos: { x, y }
-                });
+                
+                // 获取这个节点的输入连接
+                const inputConnection = getInputConnection(node.id);
+                
+                if (!inputConnection) {
+                  // 没有连接：可以拖出新线（像输出端口一样）
+                  setDragConnection({
+                    mode: 'create',
+                    from: {
+                      nodeId: node.id,
+                      side: 'left',
+                      x: node.x,
+                      y: node.y + 20
+                    },
+                    currentPos: { x, y }
+                  });
+                } else {
+                  // 有连接：移动现有连接
+                  const outputPos = getOutputPortPosition(inputConnection.id);
+                  
+                  if (outputPos) {
+                    setDragConnection({
+                      mode: 'move',
+                      connectionId: inputConnection.id,
+                      from: outputPos,
+                      currentPos: { x, y }
+                    });
+                  }
+                }
               }}
               onMouseUp={(e) => {
                 e.stopPropagation();
                 if (dragConnection && dragConnection.from.nodeId !== node.id) {
-                  const fromSide = dragConnection.from.side;
-                  if (fromSide === 'right') {
-                    createConnection(dragConnection.from.nodeId, node.id);
-                  } else if (fromSide === 'left') {
-                    createConnection(node.id, dragConnection.from.nodeId);
+                  // 检查目标节点是否已有输入连接
+                  const existingConnection = getInputConnection(node.id);
+                  
+                  if (dragConnection.mode === 'create') {
+                    // 创建模式：检查目标是否已有连接
+                    if (existingConnection) {
+                      setMessage('该端口已有连接，请先断开现有连接');
+                      setDragConnection(null);
+                      return;
+                    }
+                    
+                    const fromSide = dragConnection.from.side;
+                    if (fromSide === 'right') {
+                      createConnection(dragConnection.from.nodeId, node.id);
+                    } else if (fromSide === 'left') {
+                      createConnection(node.id, dragConnection.from.nodeId);
+                    }
+                  } else if (dragConnection.mode === 'move') {
+                    // 移动模式：如果目标已有连接且不是当前移动的连接，则拒绝
+                    if (existingConnection && existingConnection.id !== dragConnection.connectionId) {
+                      setMessage('该端口已有连接，请先断开现有连接');
+                      setDragConnection(null);
+                      return;
+                    }
+                    
+                    // 移动模式：删除旧连接，创建新连接
+                    deleteConnection(dragConnection.connectionId).then(() => {
+                      createConnection(dragConnection.from.nodeId, node.id);
+                    }).catch(error => {
+                      console.error('移动连接失败:', error);
+                    });
                   }
                 }
                 setDragConnection(null);
@@ -1083,6 +1151,7 @@ const Goals = ({ onLogout }) => {
                 const x = (e.clientX - rect.left) / scale;
                 const y = (e.clientY - rect.top) / scale;
                 setDragConnection({
+                  mode: 'create', // 右侧端口总是创建新连接
                   from: {
                     nodeId: node.id,
                     side: 'right',
@@ -1095,11 +1164,37 @@ const Goals = ({ onLogout }) => {
               onMouseUp={(e) => {
                 e.stopPropagation();
                 if (dragConnection && dragConnection.from.nodeId !== node.id) {
-                  const fromSide = dragConnection.from.side;
-                  if (fromSide === 'left') {
-                    createConnection(node.id, dragConnection.from.nodeId);
-                  } else if (fromSide === 'right') {
-                    createConnection(dragConnection.from.nodeId, node.id);
+                  // 检查目标节点是否已有输入连接
+                  const existingConnection = getInputConnection(node.id);
+                  
+                  if (dragConnection.mode === 'create') {
+                    // 创建模式：检查目标是否已有连接
+                    if (existingConnection) {
+                      setMessage('该端口已有连接，请先断开现有连接');
+                      setDragConnection(null);
+                      return;
+                    }
+                    
+                    const fromSide = dragConnection.from.side;
+                    if (fromSide === 'left') {
+                      createConnection(node.id, dragConnection.from.nodeId);
+                    } else if (fromSide === 'right') {
+                      createConnection(dragConnection.from.nodeId, node.id);
+                    }
+                  } else if (dragConnection.mode === 'move') {
+                    // 移动模式：如果目标已有连接且不是当前移动的连接，则拒绝
+                    if (existingConnection && existingConnection.id !== dragConnection.connectionId) {
+                      setMessage('该端口已有连接，请先断开现有连接');
+                      setDragConnection(null);
+                      return;
+                    }
+                    
+                    // 移动模式：删除旧连接，创建新连接
+                    deleteConnection(dragConnection.connectionId).then(() => {
+                      createConnection(dragConnection.from.nodeId, node.id);
+                    }).catch(error => {
+                      console.error('移动连接失败:', error);
+                    });
                   }
                 }
                 setDragConnection(null);
@@ -2065,6 +2160,14 @@ const Goals = ({ onLogout }) => {
             }}
             onMouseUp={(e) => {
               if (dragConnection) {
+                // 拖到空白处的处理
+                if (dragConnection.mode === 'move') {
+                  // 移动模式且拖到空白处：断开连接
+                  deleteConnection(dragConnection.connectionId).catch(error => {
+                    console.error('断开连接失败:', error);
+                  });
+                }
+                // 创建模式拖到空白处：什么都不做，只是取消拖拽
                 setDragConnection(null);
               }
               
