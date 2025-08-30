@@ -56,6 +56,8 @@ const Goals = ({ onLogout }) => {
   const [connections, setConnections] = useState([]); // 当前文件的所有连接
   const [dragConnection, setDragConnection] = useState(null); // 拖拽中的连接 {from: {nodeId, x, y}, currentPos: {x, y}}
   const [hoveredConnectionPoint, setHoveredConnectionPoint] = useState(null); // 悬停的连接点 {nodeId, side}
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 }); // 鼠标在SVG中的位置
+  const [animatingConnections, setAnimatingConnections] = useState({}); // 正在动画的连接 {connectionId: 'creating'|'deleting'}
   
   // 节点拖拽状态
   const [dragNode, setDragNode] = useState(null); // 拖拽中的节点 {nodeId, startPos: {x, y}, offset: {x, y}}
@@ -525,7 +527,7 @@ const Goals = ({ onLogout }) => {
         return false;
       }
 
-      await axios.post('http://localhost:3001/api/connections', {
+      const response = await axios.post('http://localhost:3001/api/connections', {
         from_goal_id: fromGoalId,
         to_goal_id: toGoalId,
         file_id: currentFile.id
@@ -535,6 +537,25 @@ const Goals = ({ onLogout }) => {
       
       // 重新获取连接数据
       await fetchConnections(currentFile.id);
+      
+      // 添加创建动画
+      const newConnectionId = response.data.connection?.id;
+      if (newConnectionId) {
+        setAnimatingConnections(prev => ({
+          ...prev,
+          [newConnectionId]: 'connection-creating'
+        }));
+        
+        // 动画结束后清除动画状态
+        setTimeout(() => {
+          setAnimatingConnections(prev => {
+            const newState = { ...prev };
+            delete newState[newConnectionId];
+            return newState;
+          });
+        }, 600);
+      }
+      
       setMessage('连接创建成功！');
       return true;
     } catch (error) {
@@ -549,13 +570,40 @@ const Goals = ({ onLogout }) => {
     try {
       const token = getToken();
       
-      await axios.delete(`http://localhost:3001/api/connections/${connectionId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      // 先播放删除动画
+      setAnimatingConnections(prev => ({
+        ...prev,
+        [connectionId]: 'connection-deleting'
+      }));
       
-      // 重新获取连接数据
-      await fetchConnections(currentFile.id);
-      setMessage('连接删除成功！');
+      // 等待动画完成后再删除
+      setTimeout(async () => {
+        try {
+          await axios.delete(`http://localhost:3001/api/connections/${connectionId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          
+          // 重新获取连接数据
+          await fetchConnections(currentFile.id);
+          setMessage('连接删除成功！');
+          
+          // 清除动画状态
+          setAnimatingConnections(prev => {
+            const newState = { ...prev };
+            delete newState[connectionId];
+            return newState;
+          });
+        } catch (error) {
+          console.error('删除连接失败:', error);
+          setMessage(error.response?.data?.error || '删除连接失败');
+          // 删除失败时也要清除动画状态
+          setAnimatingConnections(prev => {
+            const newState = { ...prev };
+            delete newState[connectionId];
+            return newState;
+          });
+        }
+      }, 400);
     } catch (error) {
       console.error('删除连接失败:', error);
       setMessage(error.response?.data?.error || '删除连接失败');
@@ -808,6 +856,33 @@ const Goals = ({ onLogout }) => {
     };
   };
 
+  // 检测鼠标是否靠近端口
+  const checkMouseNearPorts = (mouseX, mouseY) => {
+    const HOVER_DISTANCE = 30; // 触发距离
+    
+    for (const node of treeData) {
+      // 检查左端口
+      const leftPortX = node.x;
+      const leftPortY = node.y + 20;
+      const leftDistance = Math.sqrt(Math.pow(mouseX - leftPortX, 2) + Math.pow(mouseY - leftPortY, 2));
+      
+      if (leftDistance <= HOVER_DISTANCE) {
+        return { nodeId: node.id, side: 'left' };
+      }
+      
+      // 检查右端口
+      const rightPortX = node.x + node.width;
+      const rightPortY = node.y + 20;
+      const rightDistance = Math.sqrt(Math.pow(mouseX - rightPortX, 2) + Math.pow(mouseY - rightPortY, 2));
+      
+      if (rightDistance <= HOVER_DISTANCE) {
+        return { nodeId: node.id, side: 'right' };
+      }
+    }
+    
+    return null;
+  };
+
   // 简单的滚轮缩放
   const handleWheel = (e) => {
     e.preventDefault();
@@ -870,10 +945,10 @@ const Goals = ({ onLogout }) => {
               stroke={isDarkMode ? '#4ECDC4' : '#FF6B6B'}
               strokeWidth="2"
               fill="none"
+              className={`connection-line ${animatingConnections[connection.id] || ''}`}
               style={{ 
                 cursor: 'pointer',
-                opacity: 0.8,
-                transition: 'all 0.2s ease'
+                opacity: 0.8
               }}
               onMouseEnter={(e) => {
                 e.target.style.strokeWidth = '3';
@@ -973,28 +1048,28 @@ const Goals = ({ onLogout }) => {
           >
             {node.title}
           </text>
-          {/* 优先级表情 - 微信气泡样式 */}
+          {/* 优先级表情 - 左上角小图标 */}
           {getPriorityEmoji(node.priority) && (
             <g>
-              {/* 优先级背景圆圈 - 位于节点外面，与右上角圆角重叠 */}
+              {/* 优先级背景圆圈 - 左上角位置，缩小尺寸 */}
               <circle
-                cx={node.x + node.width - 3}
-                cy={node.y + 3}
-                r="11"
+                cx={node.x + 8}
+                cy={node.y + 8}
+                r="8"
                 fill={getPriorityBgColor(node.priority)}
                 stroke="rgba(255,255,255,0.9)"
-                strokeWidth="2"
+                strokeWidth="1.5"
                 style={{ 
                   pointerEvents: 'none',
-                  filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))'
+                  filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.2))'
                 }}
               />
               {/* 优先级表情 */}
               <text
-                x={node.x + node.width - 3}
-                y={node.y + 8}
+                x={node.x + 8}
+                y={node.y + 11}
                 textAnchor="middle"
-                fontSize="13"
+                fontSize="10"
                 style={{ pointerEvents: 'none' }}
               >
                 {getPriorityEmoji(node.priority)}
@@ -1025,7 +1100,7 @@ const Goals = ({ onLogout }) => {
             <circle
               cx={node.x}
               cy={node.y + 20}
-              r="10"
+              r="15"
               fill="transparent"
               style={{ 
                 cursor: 'crosshair'
@@ -1134,7 +1209,7 @@ const Goals = ({ onLogout }) => {
             <circle
               cx={node.x + node.width}
               cy={node.y + 20}
-              r="10"
+              r="15"
               fill="transparent"
               style={{ 
                 cursor: 'crosshair'
@@ -2128,12 +2203,24 @@ const Goals = ({ onLogout }) => {
               left: 0
             }}
             onMouseMove={(e) => {
-              // 只在真正需要时才进行坐标计算，避免与缩放冲突
-              if (!dragConnection && !dragNode) return;
-              
               const rect = e.currentTarget.getBoundingClientRect();
               const currentX = (e.clientX - rect.left) / scale;
               const currentY = (e.clientY - rect.top) / scale;
+              
+              // 更新鼠标位置
+              setMousePosition({ x: currentX, y: currentY });
+              
+              // 检测鼠标是否靠近端口（仅在没有拖拽时）
+              if (!dragConnection && !dragNode) {
+                const nearPort = checkMouseNearPorts(currentX, currentY);
+                if (nearPort) {
+                  setHoveredConnectionPoint(nearPort);
+                } else if (hoveredConnectionPoint) {
+                  // 如果之前有悬停但现在没有，清除悬停状态
+                  setHoveredConnectionPoint(null);
+                }
+                return;
+              }
               
               // 处理连接线拖拽
               if (dragConnection) {
