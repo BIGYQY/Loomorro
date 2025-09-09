@@ -68,7 +68,7 @@ const Goals = ({ onLogout }) => {
   
   // 画布相关状态
   const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: -2200, y: -1200 }); // 让画布中心的节点显示在屏幕中心附近
+  const [position, setPosition] = useState({ x: 0, y: 0 }); // 画布和屏幕完全匹配
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const canvasRef = useRef(null);
@@ -2329,8 +2329,8 @@ const Goals = ({ onLogout }) => {
           </div>
         ) : (
           <svg
-            width="5000"
-            height="3000"
+            width={window.innerWidth}
+            height={window.innerHeight - 130}
             style={{
               transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
               transformOrigin: '0 0',
